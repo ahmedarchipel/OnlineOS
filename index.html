@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SNO — Soutien Scolaire</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="config.js"></script>
+<style>
+:root{--primary:#1F4E79;--secondary:#2E75B6;--accent:#D6E4F0;--success:#27AE60;--warning:#F39C12;--danger:#E74C3C;--bg:#F0F4F8;--white:#FFFFFF;--text:#2C3E50;--muted:#7F8C8D;--sidebar-w:240px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
+#app{display:flex;height:100vh;overflow:hidden;}
+#sidebar{width:var(--sidebar-w);background:var(--primary);display:flex;flex-direction:column;flex-shrink:0;}
+#sidebar .logo{padding:18px 20px;color:#fff;font-weight:700;font-size:15px;border-bottom:1px solid rgba(255,255,255,.15);}
+#sidebar .logo span{display:block;font-size:11px;font-weight:400;opacity:.7;margin-top:2px;}
+#sidebar nav{flex:1;overflow-y:auto;padding:8px 0;}
+#sidebar nav a{display:flex;align-items:center;gap:10px;padding:10px 20px;color:rgba(255,255,255,.8);text-decoration:none;font-size:13px;transition:all .2s;cursor:pointer;}
+#sidebar nav a:hover,#sidebar nav a.active{background:rgba(255,255,255,.15);color:#fff;}
+#sidebar nav a .icon{font-size:16px;width:20px;text-align:center;}
+#sidebar .user-box{padding:14px 20px;border-top:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);font-size:12px;}
+#sidebar .user-box strong{display:block;color:#fff;margin-bottom:2px;}
+#sidebar .user-box button{margin-top:8px;background:rgba(255,255,255,.15);border:none;color:#fff;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;}
+#main-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+#topbar{height:56px;background:var(--white);border-bottom:1px solid #DDE3EA;display:flex;align-items:center;padding:0 24px;gap:16px;}
+#topbar h1{font-size:17px;font-weight:600;color:var(--primary);flex:1;}
+#topbar .badge{background:var(--accent);color:var(--secondary);padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;}
+#content{flex:1;overflow-y:auto;padding:24px;}
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--primary),var(--secondary));}
+.login-card{background:var(--white);border-radius:12px;padding:40px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.2);}
+.login-card h2{color:var(--primary);margin-bottom:6px;font-size:22px;}
+.login-card p{color:var(--muted);font-size:13px;margin-bottom:24px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:16px;margin-bottom:24px;}
+.kpi-card{background:var(--white);border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);border-left:4px solid var(--secondary);}
+.kpi-card.green{border-color:var(--success);}.kpi-card.orange{border-color:var(--warning);}.kpi-card.red{border-color:var(--danger);}
+.kpi-card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.kpi-card .value{font-size:28px;font-weight:700;color:var(--text);line-height:1;}
+.kpi-card .sub{font-size:11px;color:var(--muted);margin-top:4px;}
+.panel{background:var(--white);border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:20px;}
+.panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #EEF2F7;}
+.panel-title{font-size:15px;font-weight:600;color:var(--primary);}
+.tbl-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{background:#F7F9FC;padding:10px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid #EEF2F7;}
+td{padding:10px 12px;border-bottom:1px solid #EEF2F7;font-size:13px;}
+tr:hover td{background:#FAFBFD;}
+.form-group{margin-bottom:16px;}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px;}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 12px;border:1.5px solid #DDE3EA;border-radius:6px;font-size:13px;color:var(--text);outline:none;transition:border .2s;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--secondary);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s;}
+.btn-primary{background:var(--secondary);color:#fff;}.btn-primary:hover{background:var(--primary);}
+.btn-success{background:var(--success);color:#fff;}.btn-danger{background:var(--danger);color:#fff;}
+.btn-outline{background:transparent;border:1.5px solid var(--secondary);color:var(--secondary);}.btn-outline:hover{background:var(--accent);}
+.btn-sm{padding:5px 10px;font-size:12px;}
+.badge{display:inline-block;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+.badge-green{background:#D5F5E3;color:#27AE60;}.badge-orange{background:#FDEBD0;color:#E67E22;}
+.badge-red{background:#FADBD8;color:#E74C3C;}.badge-blue{background:#D6EAF8;color:#2980B9;}
+.badge-grey{background:#EAECEE;color:#7F8C8D;}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--white);border-radius:12px;padding:28px;width:580px;max-width:95vw;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:17px;font-weight:700;color:var(--primary);margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #EEF2F7;}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid #EEF2F7;}
+.alert{padding:12px 16px;border-radius:8px;margin-bottom:16px;font-size:13px;}
+.alert-info{background:#D6EAF8;color:#1A5276;border-left:4px solid var(--secondary);}
+.alert-warning{background:#FDEBD0;color:#784212;border-left:4px solid var(--warning);}
+.alert-danger{background:#FADBD8;color:#78281F;border-left:4px solid var(--danger);}
+.pipeline{display:flex;gap:3px;flex-wrap:wrap;}
+.pipeline-step{padding:3px 8px;border-radius:10px;font-size:10px;font-weight:600;background:#EEF2F7;color:var(--muted);}
+.pipeline-step.active{background:var(--secondary);color:#fff;}.pipeline-step.done{background:var(--success);color:#fff;}
+.tabs{display:flex;border-bottom:2px solid #EEF2F7;margin-bottom:20px;flex-wrap:wrap;}
+.tab{padding:10px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s;}
+.tab.active{color:var(--secondary);border-bottom-color:var(--secondary);}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+.chart-box{background:var(--white);border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);}
+.chart-box h3{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:14px;}
+canvas{max-height:200px;}
+.filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+.filter-bar select,.filter-bar input{padding:7px 10px;border:1.5px solid #DDE3EA;border-radius:6px;font-size:13px;}
+.empty{text-align:center;padding:40px 20px;color:var(--muted);}
+.empty .icon{font-size:36px;margin-bottom:10px;}
+.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--muted);}
+.spinner{width:24px;height:24px;border:3px solid #EEF2F7;border-top-color:var(--secondary);border-radius:50%;animation:spin .7s linear infinite;margin-right:12px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+#toast{position:fixed;bottom:24px;right:24px;z-index:2000;display:flex;flex-direction:column;gap:8px;}
+.toast-item{background:var(--text);color:#fff;padding:12px 18px;border-radius:8px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.25);animation:slideIn .3s ease;}
+.toast-item.success{background:var(--success);}.toast-item.error{background:var(--danger);}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+<div class="login-card">
+  <h2>🎓 Soutien Scolaire en Ligne</h2>
+  <p>Système Nerveux Opérationnel — Connexion</p>
+  <div id="login-alert"></div>
+  <div class="form-group"><label>Email</label><input id="li-email" type="email" placeholder="votre@email.com"/></div>
+  <div class="form-group"><label>Mot de passe</label><input id="li-pwd" type="password" placeholder="••••••••"/></div>
+  <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Se connecter</button>
+  <p style="margin-top:14px;text-align:center;font-size:12px;color:var(--muted)">
+    Pas de compte ? <a href="#" onclick="showReg()" style="color:var(--secondary)">S'inscrire</a>
+  </p>
+  <div id="reg-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid #EEF2F7">
+    <div class="form-row">
+      <div class="form-group"><label>Prénom</label><input id="reg-pren" placeholder="Prénom"/></div>
+      <div class="form-group"><label>Nom</label><input id="reg-nom2" placeholder="Nom"/></div>
+    </div>
+    <button class="btn btn-success" style="width:100%" onclick="doRegister()">Créer le compte</button>
+  </div>
+</div>
+</div>
+
+<div id="app" style="display:none">
+  <div id="sidebar">
+    <div class="logo">SNO <span id="sb-app-name">Soutien Scolaire</span></div>
+    <nav>
+      <a onclick="nav('dashboard')" id="nav-dashboard"><span class="icon">📊</span>Tableau de bord</a>
+      <a onclick="nav('planification')" id="nav-planification"><span class="icon">📅</span>Planification</a>
+      <a onclick="nav('saisie')" id="nav-saisie"><span class="icon">✏️</span>Saisie</a>
+      <a onclick="nav('technique')" id="nav-technique"><span class="icon">🔧</span>Technique &amp; QC</a>
+      <a onclick="nav('fidelisation')" id="nav-fidelisation"><span class="icon">🤝</span>Fidélisation</a>
+      <a onclick="nav('professeurs')" id="nav-professeurs"><span class="icon">👨‍🏫</span>Professeurs</a>
+      <a onclick="nav('eleves')" id="nav-eleves"><span class="icon">🎒</span>Élèves</a>
+      <a onclick="nav('salaires')" id="nav-salaires"><span class="icon">💰</span>Salaires</a>
+      <a onclick="nav('referentiels')" id="nav-referentiels"><span class="icon">⚙️</span>Référentiels</a>
+    </nav>
+    <div class="user-box">
+      <strong id="user-name">…</strong>
+      <span id="user-role">—</span>
+      <button onclick="doLogout()">Déconnexion</button>
+    </div>
+  </div>
+  <div id="main-wrap">
+    <div id="topbar">
+      <h1 id="page-title">Tableau de bord</h1>
+      <span class="badge" id="topbar-date"></span>
+    </div>
+    <div id="content"><div class="loading"><div class="spinner"></div>Chargement…</div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal-box"></div>
+</div>
+<div id="toast"></div>
+<script>
+// ── Init ──────────────────────────────────────────────────────────────
+const {createClient} = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+let currentUser=null, currentProfile=null;
+
+function today(){return new Date().toISOString().split('T')[0];}
+function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('fr-FR');}
+function fmtDT(d){if(!d)return'—';return new Date(d).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'});}
+function fmtHour(t){if(!t)return'—';return t.slice(0,5);}
+function monthStart(){const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;}
+
+function toast(msg,type=''){
+  const t=document.getElementById('toast');
+  const el=document.createElement('div');
+  el.className='toast-item '+(type||'');
+  el.textContent=msg; t.appendChild(el);
+  setTimeout(()=>el.remove(),3500);
+}
+function openModal(html){
+  document.getElementById('modal-box').innerHTML=html;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal(e){
+  if(!e||e.target===document.getElementById('modal-overlay'))
+    document.getElementById('modal-overlay').classList.remove('open');
+}
+const SC={planifiee:'blue',realisee:'green',annulee:'red',reportee:'orange',validee:'green',
+  terminee:'blue',en_cours:'orange',non_commencee:'grey',rejetee:'red',publie:'green',
+  valide:'green',non_envoye:'grey',en_attente:'orange',en_verification:'blue',
+  ouvert:'orange',ferme:'green',actif:'green',inactif:'grey',suspendu:'orange',
+  resilie:'red',calcule:'blue',paye:'green'};
+function badge(v){const c=SC[v]||'grey';return`<span class="badge badge-${c}">${v||'—'}</span>`;}
+
+// ── Auth ──────────────────────────────────────────────────────────────
+async function doLogin(){
+  const email=document.getElementById('li-email').value;
+  const pwd=document.getElementById('li-pwd').value;
+  document.getElementById('login-alert').innerHTML='';
+  const {error}=await sb.auth.signInWithPassword({email,password:pwd});
+  if(error) document.getElementById('login-alert').innerHTML=`<div class="alert alert-danger">${error.message}</div>`;
+}
+function showReg(){document.getElementById('reg-form').style.display='block';}
+async function doRegister(){
+  const email=document.getElementById('li-email').value;
+  const pwd=document.getElementById('li-pwd').value;
+  const prenom=document.getElementById('reg-pren').value;
+  const nom=document.getElementById('reg-nom2').value;
+  const {error}=await sb.auth.signUp({email,password:pwd,options:{data:{prenom,nom}}});
+  if(error)toast(error.message,'error');
+  else toast('Compte créé ! Vérifiez votre email.','success');
+}
+async function doLogout(){await sb.auth.signOut();location.reload();}
+
+sb.auth.onAuthStateChange(async(_,session)=>{
+  if(session?.user){
+    currentUser=session.user;
+    await loadProfile();
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').style.display='flex';
+    document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    nav('dashboard');
+  } else {
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('app').style.display='none';
+  }
+});
+async function loadProfile(){
+  const {data}=await sb.from('user_profiles').select('*').eq('id',currentUser.id).single();
+  currentProfile=data;
+  if(data){
+    document.getElementById('user-name').textContent=(data.prenom+' '+data.nom).trim()||currentUser.email;
+    document.getElementById('user-role').textContent=data.role||'—';
+  }
+}
+
+// ── Navigation ────────────────────────────────────────────────────────
+const TITLES={dashboard:'Tableau de bord',planification:'Planification',saisie:'Saisie',
+  technique:'Technique & Contrôle Qualité',fidelisation:'Fidélisation',professeurs:'Professeurs',
+  eleves:'Élèves',salaires:'Salaires',referentiels:'Référentiels'};
+function nav(page){
+  document.querySelectorAll('#sidebar nav a').forEach(a=>a.classList.remove('active'));
+  const el=document.getElementById('nav-'+page);
+  if(el)el.classList.add('active');
+  document.getElementById('page-title').textContent=TITLES[page]||page;
+  const m={dashboard:renderDashboard,planification:renderPlanification,saisie:renderSaisie,
+    technique:renderTechnique,fidelisation:renderFidelisation,professeurs:renderProfesseurs,
+    eleves:renderEleves,salaires:renderSalaires,referentiels:renderReferentiels};
+  if(m[page])m[page]();
+}
+</script>
+<script>
+// ── DASHBOARD ─────────────────────────────────────────────────────────
+async function renderDashboard(){
+  const c=document.getElementById('content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  const mois=monthStart();
+  const [sR,iR,mR,saR,abR]=await Promise.all([
+    sb.from('sessions').select('id,statut,date_session,nb_eleves_prevus,nb_eleves_presents').gte('date_session',mois),
+    sb.from('incidents_lives').select('id,resolu').gte('signale_le',mois),
+    sb.from('montages').select('id,statut'),
+    sb.from('saisies').select('id,statut'),
+    sb.from('absences').select('id').gte('created_at',mois)
+  ]);
+  const ses=sR.data||[],inc=iR.data||[],mtg=mR.data||[],sai=saR.data||[],abs=abR.data||[];
+  const total=ses.length,real=ses.filter(s=>s.statut==='realisee').length;
+  const tr=total?Math.round(real/total*100):0;
+  const tp_=ses.reduce((a,s)=>a+(s.nb_eleves_prevus||0),0);
+  const tp=ses.reduce((a,s)=>a+(s.nb_eleves_presents||0),0);
+  const tpres=tp_?Math.round(tp/tp_*100):0;
+  const last14=[...Array(14)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-13+i);return d.toISOString().split('T')[0];});
+  c.innerHTML=`
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="label">Séances ce mois</div><div class="value">${total}</div><div class="sub">${real} réalisées</div></div>
+    <div class="kpi-card ${tr>=90?'green':tr>=70?'orange':'red'}"><div class="label">Taux réalisation</div><div class="value">${tr}%</div><div class="sub">Obj. &gt;95%</div></div>
+    <div class="kpi-card ${tpres>=80?'green':tpres>=60?'orange':'red'}"><div class="label">Présence élèves</div><div class="value">${tpres}%</div><div class="sub">${tp}/${tp_} prévus</div></div>
+    <div class="kpi-card ${inc.filter(i=>!i.resolu).length>5?'red':'orange'}"><div class="label">Incidents lives</div><div class="value">${inc.length}</div><div class="sub">${inc.filter(i=>!i.resolu).length} ouverts</div></div>
+    <div class="kpi-card ${mtg.filter(m=>m.statut==='en_attente').length>3?'red':'orange'}"><div class="label">Montages en attente</div><div class="value">${mtg.filter(m=>m.statut==='en_attente').length}</div></div>
+    <div class="kpi-card ${sai.filter(s=>s.statut==='non_commencee').length>10?'red':'orange'}"><div class="label">Saisies backlog</div><div class="value">${sai.filter(s=>s.statut==='non_commencee').length}</div></div>
+    <div class="kpi-card"><div class="label">Absences ce mois</div><div class="value">${abs.length}</div></div>
+  </div>
+  <div class="charts-row">
+    <div class="chart-box"><h3>Séances — 14 derniers jours</h3><canvas id="ch1"></canvas></div>
+    <div class="chart-box"><h3>Statuts séances (mois)</h3><canvas id="ch2"></canvas></div>
+  </div>
+  <div class="panel"><div class="panel-header"><span class="panel-title">⚠️ Alertes actives</span></div><div id="al-list"></div></div>`;
+
+  new Chart(document.getElementById('ch1'),{type:'bar',data:{
+    labels:last14.map(d=>d.slice(5)),
+    datasets:[{label:'Séances',data:last14.map(d=>ses.filter(s=>s.date_session===d).length),backgroundColor:'rgba(46,117,182,.7)',borderRadius:4}]
+  },options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
+  new Chart(document.getElementById('ch2'),{type:'doughnut',data:{
+    labels:['Planifiée','Réalisée','Annulée','Reportée'],
+    datasets:[{data:['planifiee','realisee','annulee','reportee'].map(s=>ses.filter(x=>x.statut===s).length),backgroundColor:['#2E75B6','#27AE60','#E74C3C','#F39C12']}]
+  },options:{plugins:{legend:{position:'bottom'}}}});
+
+  const alerts=[];
+  if(sai.filter(s=>s.statut==='non_commencee').length>5)alerts.push({t:'warning',m:'Backlog saisies élevé'});
+  if(mtg.filter(m=>m.statut==='en_attente').length>3)alerts.push({t:'danger',m:'Montages en attente > 3'});
+  if(tr<90&&total>0)alerts.push({t:'warning',m:`Taux réalisation faible : ${tr}%`});
+  const al=document.getElementById('al-list');
+  al.innerHTML=alerts.length?alerts.map(a=>`<div class="alert alert-${a.t}">${a.m}</div>`).join('')
+    :'<div style="color:var(--success);padding:12px">✅ Aucune alerte — Tout est nominal</div>';
+}
+</script>
+<script>
+// ── PLANIFICATION ─────────────────────────────────────────────────────
+let PD={sessions:[],profs:[],matieres:[],salles:[],classes:[],sieges:[]};
+async function renderPlanification(){
+  const c=document.getElementById('content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  const [sR,pR,mR,salR,clR,sgR]=await Promise.all([
+    sb.from('sessions').select('*,professeurs(prenom,nom),matieres(nom,code),salles(nom),sieges(nom)').order('date_session').order('heure_debut'),
+    sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
+    sb.from('matieres').select('id,nom,code').eq('actif',true),
+    sb.from('salles').select('id,nom,siege_id').eq('actif',true),
+    sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true),
+    sb.from('sieges').select('id,nom').eq('actif',true)
+  ]);
+  PD={sessions:sR.data||[],profs:pR.data||[],matieres:mR.data||[],salles:salR.data||[],classes:clR.data||[],sieges:sgR.data||[]};
+  renderPlanifList('','');
+}
+function renderPlanifList(fm,fp){
+  const c=document.getElementById('content');
+  let ses=PD.sessions;
+  if(fm)ses=ses.filter(s=>s.date_session?.startsWith(fm));
+  if(fp)ses=ses.filter(s=>s.professeur_id===fp);
+  const mOpts=[...new Set(PD.sessions.map(s=>s.date_session?.slice(0,7)))].sort().reverse().map(m=>`<option value="${m}">${m}</option>`).join('');
+  const pOpts=PD.profs.map(p=>`<option value="${p.id}">${p.nom} ${p.prenom}</option>`).join('');
+  c.innerHTML=`
+  <div class="filter-bar">
+    <button class="btn btn-primary" onclick="openSesModal()">+ Nouvelle séance</button>
+    <select id="fm" onchange="filterP()"><option value="">Tous mois</option>${mOpts}</select>
+    <select id="fp" onchange="filterP()" style="min-width:160px"><option value="">Tous profs</option>${pOpts}</select>
+    <button class="btn btn-outline btn-sm" onclick="dlCSV()">⬇ CSV</button>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">📅 Séances (${ses.length})</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Date</th><th>Horaire</th><th>Professeur</th><th>Matière</th><th>Salle</th><th>Élèves</th><th>Lien live</th><th>Statut</th><th>Actions</th></tr></thead>
+      <tbody>${ses.length?ses.map(s=>`
+        <tr>
+          <td><strong>${fmtDate(s.date_session)}</strong></td>
+          <td>${fmtHour(s.heure_debut)}–${fmtHour(s.heure_fin)}</td>
+          <td>${s.professeurs?s.professeurs.nom+' '+s.professeurs.prenom:'—'}</td>
+          <td>${s.matieres?`<span class="badge badge-blue">${s.matieres.code}</span>`:'—'} ${s.matieres?.nom||''}</td>
+          <td>${s.salles?.nom||'—'}</td>
+          <td>${s.nb_eleves_prevus||'—'}</td>
+          <td>${s.lien_live?`<a href="${s.lien_live}" target="_blank" style="color:var(--secondary)">🔗</a>`:'—'}</td>
+          <td>${badge(s.statut)}</td>
+          <td>
+            <button class="btn btn-outline btn-sm" onclick="editSes('${s.id}')">✏️</button>
+            <button class="btn btn-sm" style="background:var(--success);color:#fff" onclick="setStatut('${s.id}','realisee')">✔</button>
+            <button class="btn btn-danger btn-sm" onclick="setStatut('${s.id}','annulee')">✕</button>
+          </td>
+        </tr>`).join(''):`<tr><td colspan="9"><div class="empty"><div class="icon">📅</div>Aucune séance</div></td></tr>`}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+function filterP(){renderPlanifList(document.getElementById('fm')?.value||'',document.getElementById('fp')?.value||'');}
+function dlCSV(){
+  const rows=[['Date','HeureDeb','HeureFin','Professeur','Matière','Salle','NbPrévus','Statut']];
+  PD.sessions.forEach(s=>rows.push([s.date_session,s.heure_debut?.slice(0,5),s.heure_fin?.slice(0,5),(s.professeurs?.nom||'')+' '+(s.professeurs?.prenom||''),s.matieres?.nom||'',s.salles?.nom||'',s.nb_eleves_prevus||0,s.statut]));
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.map(r=>r.join(',')).join('\n'));a.download='planning.csv';a.click();
+}
+function openSesModal(s=null){
+  const pO=PD.profs.map(p=>`<option value="${p.id}" ${s?.professeur_id===p.id?'selected':''}>${p.nom} ${p.prenom}</option>`).join('');
+  const mO=PD.matieres.map(m=>`<option value="${m.id}" ${s?.matiere_id===m.id?'selected':''}>${m.nom}</option>`).join('');
+  const salO=PD.salles.map(sl=>`<option value="${sl.id}" ${s?.salle_id===sl.id?'selected':''}>${sl.nom}</option>`).join('');
+  const sgO=PD.sieges.map(sg=>`<option value="${sg.id}" ${s?.siege_id===sg.id?'selected':''}>${sg.nom}</option>`).join('');
+  openModal(`
+  <div class="modal-title">${s?.id?'Modifier':'Nouvelle'} séance</div>
+  <input type="hidden" id="s-id" value="${s?.id||''}"/>
+  <div class="form-row">
+    <div class="form-group"><label>Date</label><input id="s-dt" type="date" value="${s?.date_session||today()}"/></div>
+    <div class="form-group"><label>Type</label><select id="s-ty">
+      <option value="live" ${s?.type_session==='live'?'selected':''}>Live</option>
+      <option value="rattrapage" ${s?.type_session==='rattrapage'?'selected':''}>Rattrapage</option>
+      <option value="examen" ${s?.type_session==='examen'?'selected':''}>Examen</option>
+    </select></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Heure début</label><input id="s-hd" type="time" value="${s?.heure_debut?.slice(0,5)||'08:00'}"/></div>
+    <div class="form-group"><label>Heure fin</label><input id="s-hf" type="time" value="${s?.heure_fin?.slice(0,5)||'10:00'}"/></div>
+  </div>
+  <div class="form-group"><label>Professeur</label><select id="s-pr"><option value="">— Choisir —</option>${pO}</select></div>
+  <div class="form-group"><label>Matière</label><select id="s-ma"><option value="">— Choisir —</option>${mO}</select></div>
+  <div class="form-row">
+    <div class="form-group"><label>Siège</label><select id="s-sg"><option value="">— Choisir —</option>${sgO}</select></div>
+    <div class="form-group"><label>Salle</label><select id="s-sa"><option value="">— Choisir —</option>${salO}</select></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Nb élèves prévus</label><input id="s-nb" type="number" min="0" value="${s?.nb_eleves_prevus||0}"/></div>
+    <div class="form-group"><label>Lien live</label><input id="s-ll" placeholder="https://..." value="${s?.lien_live||''}"/></div>
+  </div>
+  <div class="form-group"><label>Notes techniques</label><textarea id="s-nt" rows="2">${s?.notes_tech||''}</textarea></div>
+  ${s?.id?'<div class="form-group"><label>Motif modification</label><textarea id="s-mot" rows="2" placeholder="Raison du changement…"></textarea></div>':''}
+  <div class="modal-actions">
+    <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+    <button class="btn btn-primary" onclick="saveSes()">💾 Enregistrer</button>
+  </div>`);
+}
+async function saveSes(){
+  const id=document.getElementById('s-id').value;
+  const dt=document.getElementById('s-dt').value;
+  const payload={date_session:dt,heure_debut:document.getElementById('s-hd').value,heure_fin:document.getElementById('s-hf').value,
+    professeur_id:document.getElementById('s-pr').value||null,matiere_id:document.getElementById('s-ma').value||null,
+    siege_id:document.getElementById('s-sg').value||null,salle_id:document.getElementById('s-sa').value||null,
+    nb_eleves_prevus:parseInt(document.getElementById('s-nb').value)||0,lien_live:document.getElementById('s-ll').value||null,
+    notes_tech:document.getElementById('s-nt').value||null,type_session:document.getElementById('s-ty').value,
+    planifie_par:currentUser?.id||null,mois_planning:dt?dt.slice(0,8)+'01':null};
+  if(id){const mot=document.getElementById('s-mot')?.value;if(mot)payload.motif_modification=mot;}
+  const {error}=id?await sb.from('sessions').update(payload).eq('id',id):await sb.from('sessions').insert(payload);
+  if(error)toast(error.message,'error');else{toast(id?'Séance modifiée':'Séance créée','success');closeModal();renderPlanification();}
+}
+async function editSes(id){const {data}=await sb.from('sessions').select('*').eq('id',id).single();if(data)openSesModal(data);}
+async function setStatut(id,statut){
+  let extra={};
+  if(statut==='realisee'){const n=prompt('Nb élèves présents ?','0');if(n!==null)extra.nb_eleves_presents=parseInt(n)||0;}
+  const {error}=await sb.from('sessions').update({statut,...extra}).eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Statut : '+statut,'success');renderPlanification();}
+}
+</script>
+<script>
+// ── SAISIE ─────────────────────────────────────────────────────────────
+async function renderSaisie(){
+  const c=document.getElementById('content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  const [dR,sR,sesR,pR]=await Promise.all([
+    sb.from('series_documents').select('*,sessions(date_session,heure_debut,matieres(nom)),professeurs(prenom,nom)').order('created_at',{ascending:false}),
+    sb.from('saisies').select('*,sessions(date_session,matieres(nom)),user_profiles(prenom,nom)').order('created_at',{ascending:false}).limit(60),
+    sb.from('sessions').select('id,date_session,heure_debut,matieres(nom),professeurs(nom,prenom)').order('date_session',{ascending:false}).limit(100),
+    sb.from('professeurs').select('id,prenom,nom').eq('actif',true)
+  ]);
+  const docs=dR.data||[],saisies=sR.data||[];
+  const sesO=(sesR.data||[]).map(s=>`<option value="${s.id}">${fmtDate(s.date_session)} ${s.heure_debut?.slice(0,5)} — ${s.matieres?.nom||''} — ${s.professeurs?.nom||''}</option>`).join('');
+  const pO=(pR.data||[]).map(p=>`<option value="${p.id}">${p.nom} ${p.prenom}</option>`).join('');
+  const DOC_S=['non_envoye','en_attente','en_cours','en_verification','valide','publie'];
+  function pipe(cur){return`<div class="pipeline">${DOC_S.map(s=>`<span class="pipeline-step ${s===cur?'active':DOC_S.indexOf(s)<DOC_S.indexOf(cur)?'done':''}">${s.replace(/_/g,' ')}</span>`).join('')}</div>`;}
+  c.innerHTML=`
+  <div class="kpi-grid">
+    <div class="kpi-card orange"><div class="label">Backlog saisies</div><div class="value">${saisies.filter(s=>s.statut==='non_commencee').length}</div></div>
+    <div class="kpi-card blue"><div class="label">En cours</div><div class="value">${saisies.filter(s=>s.statut==='en_cours').length}</div></div>
+    <div class="kpi-card green"><div class="label">Validées</div><div class="value">${saisies.filter(s=>s.statut==='validee').length}</div></div>
+    <div class="kpi-card"><div class="label">Documents reçus</div><div class="value">${docs.length}</div></div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="stab('docs',this)">📂 Documents professeurs</div>
+    <div class="tab" onclick="stab('saisies',this)">✏️ Mes saisies</div>
+  </div>
+  <div id="st-docs">
+    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openDocM()">+ Enregistrer document reçu</button></div>
+    <div class="panel"><div class="tbl-wrap"><table>
+      <thead><tr><th>Session</th><th>Prof</th><th>Format</th><th>Reçu le</th><th>Pipeline statut</th><th>Qualité</th><th>Action</th></tr></thead>
+      <tbody>${docs.length?docs.map(d=>`<tr>
+        <td>${d.sessions?fmtDate(d.sessions.date_session)+' '+fmtHour(d.sessions.heure_debut):'—'}<br><small>${d.sessions?.matieres?.nom||''}</small></td>
+        <td>${d.professeurs?d.professeurs.nom+' '+d.professeurs.prenom:'—'}</td>
+        <td><span class="badge badge-blue">${d.format_document||'—'}</span></td>
+        <td>${fmtDT(d.date_reception)}</td>
+        <td>${pipe(d.statut)}</td>
+        <td>${d.qualite_doc?'⭐'.repeat(d.qualite_doc):'—'}</td>
+        <td><button class="btn btn-outline btn-sm" onclick="advDoc('${d.id}','${d.statut}')">Avancer →</button></td>
+      </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><div class="icon">📂</div>Aucun document</div></td></tr>`}
+      </tbody>
+    </table></div></div>
+  </div>
+  <div id="st-saisies" style="display:none">
+    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openNewSaisie('${sesO.replace(/'/g,"\\'")}')">+ Créer saisie</button></div>
+    <div class="panel"><div class="tbl-wrap"><table>
+      <thead><tr><th>Session</th><th>Agent</th><th>Début</th><th>Fin</th><th>Statut</th><th>Score QC</th><th>Commentaire</th><th>Actions</th></tr></thead>
+      <tbody>${saisies.length?saisies.map(s=>`<tr>
+        <td>${fmtDate(s.sessions?.date_session)}<br><small>${s.sessions?.matieres?.nom||''}</small></td>
+        <td>${s.user_profiles?s.user_profiles.prenom+' '+s.user_profiles.nom:'—'}</td>
+        <td>${fmtDT(s.date_debut)}</td><td>${fmtDT(s.date_fin)}</td>
+        <td>${badge(s.statut)}</td>
+        <td>${s.score_qualite!=null?s.score_qualite+'/10':'—'}</td>
+        <td style="max-width:150px;font-size:12px;color:var(--muted)">${s.commentaire_qc||'—'}</td>
+        <td>
+          ${s.statut==='non_commencee'?`<button class="btn btn-outline btn-sm" onclick="startS('${s.id}')">▶</button>`:''}
+          ${s.statut==='en_cours'?`<button class="btn btn-success btn-sm" onclick="finishS('${s.id}')">✔</button>`:''}
+        </td>
+      </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><div class="icon">✏️</div>Aucune saisie</div></td></tr>`}
+      </tbody>
+    </table></div></div>
+  </div>`;
+  // Store sesO and pO for modals
+  window._sesO=sesO; window._pO=pO;
+}
+function stab(t,el){
+  document.querySelectorAll('.tabs .tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');
+  document.getElementById('st-docs').style.display=t==='docs'?'block':'none';
+  document.getElementById('st-saisies').style.display=t==='saisies'?'block':'none';
+}
+const DS=['non_envoye','en_attente','en_cours','en_verification','valide','publie'];
+async function advDoc(id,cur){
+  const idx=DS.indexOf(cur);
+  if(idx<DS.length-1){
+    const {error}=await sb.from('series_documents').update({statut:DS[idx+1]}).eq('id',id);
+    if(error)toast(error.message,'error');else{toast('Document → '+DS[idx+1],'success');renderSaisie();}
+  }else toast('Document déjà publié','');
+}
+function openDocM(){
+  openModal(`
+  <div class="modal-title">📂 Document reçu du professeur</div>
+  <div class="form-group"><label>Session</label><select id="d-s"><option value="">— Choisir —</option>${window._sesO||''}</select></div>
+  <div class="form-group"><label>Professeur</label><select id="d-p"><option value="">— Choisir —</option>${window._pO||''}</select></div>
+  <div class="form-row">
+    <div class="form-group"><label>Format</label><select id="d-f"><option value="PDF">PDF</option><option value="PPT">PPT</option><option value="scan">Scan</option><option value="image">Image</option><option value="ancien_doc">Ancien doc</option><option value="autre">Autre</option></select></div>
+    <div class="form-group"><label>Qualité (1-5)</label><select id="d-q"><option value="">—</option>${[1,2,3,4,5].map(n=>`<option value="${n}">${'⭐'.repeat(n)}</option>`).join('')}</select></div>
+  </div>
+  <div class="form-group"><label>Date réception</label><input id="d-dt" type="datetime-local" value="${new Date().toISOString().slice(0,16)}"/></div>
+  <div class="form-group"><label>Lien fichier</label><input id="d-u" placeholder="https://…"/></div>
+  <div class="form-group"><label>Notes</label><textarea id="d-n" rows="2"></textarea></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveDoc()">💾 Enregistrer</button></div>`);
+}
+async function saveDoc(){
+  const {error}=await sb.from('series_documents').insert({session_id:document.getElementById('d-s').value||null,professeur_id:document.getElementById('d-p').value||null,format_document:document.getElementById('d-f').value,qualite_doc:document.getElementById('d-q').value||null,date_reception:document.getElementById('d-dt').value,url_fichier:document.getElementById('d-u').value||null,notes:document.getElementById('d-n').value||null,statut:'en_attente'});
+  if(error)toast(error.message,'error');else{toast('Document enregistré','success');closeModal();renderSaisie();}
+}
+function openNewSaisie(sesO){
+  openModal(`
+  <div class="modal-title">✏️ Créer une saisie</div>
+  <div class="form-group"><label>Session</label><select id="ns-s"><option value="">— Choisir —</option>${sesO}</select></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="createSaisie()">💾 Créer</button></div>`);
+}
+async function createSaisie(){
+  const sesId=document.getElementById('ns-s').value;
+  if(!sesId){toast('Choisir une session','error');return;}
+  const {error}=await sb.from('saisies').insert({session_id:sesId,agent_id:currentUser?.id,statut:'non_commencee'});
+  if(error)toast(error.message,'error');else{toast('Saisie créée','success');closeModal();renderSaisie();}
+}
+async function startS(id){
+  const {error}=await sb.from('saisies').update({statut:'en_cours',date_debut:new Date().toISOString()}).eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Saisie démarrée','success');renderSaisie();}
+}
+async function finishS(id){
+  const url=prompt('URL fichier saisi (optionnel) :','');
+  const {error}=await sb.from('saisies').update({statut:'terminee',date_fin:new Date().toISOString(),url_fichier_saisi:url||null}).eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Saisie soumise pour validation','success');renderSaisie();}
+}
+</script>
+<script>
+// ── TECHNIQUE / QC ─────────────────────────────────────────────────────
+async function renderTechnique(){
+  const c=document.getElementById('content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  const [sesR,saiR,incR,mtgR,cqR,ecR]=await Promise.all([
+    sb.from('sessions').select('id,date_session,heure_debut,statut,matieres(nom),professeurs(nom,prenom)').order('date_session',{ascending:false}).limit(100),
+    sb.from('saisies').select('*,sessions(date_session,matieres(nom)),user_profiles(prenom,nom)').eq('statut','terminee').order('updated_at',{ascending:false}),
+    sb.from('incidents_lives').select('*,sessions(date_session,matieres(nom))').order('signale_le',{ascending:false}).limit(50),
+    sb.from('montages').select('*,sessions(date_session,matieres(nom),professeurs(nom,prenom))').order('created_at',{ascending:false}),
+    sb.from('controles_qualite').select('*,sessions(date_session,matieres(nom)),user_profiles(prenom,nom)').order('date_controle',{ascending:false}).limit(50),
+    sb.from('erreurs_checklist').select('*,sessions(date_session,matieres(nom))').order('signale_le',{ascending:false}).limit(60)
+  ]);
+  const ses=sesR.data||[],sai=saiR.data||[],inc=incR.data||[],mtg=mtgR.data||[],cq=cqR.data||[],ec=ecR.data||[];
+  const sO=ses.map(s=>`<option value="${s.id}">${fmtDate(s.date_session)} ${s.heure_debut?.slice(0,5)} — ${s.matieres?.nom||''} — ${s.professeurs?.nom||''}</option>`).join('');
+  c.innerHTML=`
+  <div class="kpi-grid">
+    <div class="kpi-card ${sai.length>5?'red':sai.length>2?'orange':'green'}"><div class="label">Saisies à valider</div><div class="value">${sai.length}</div></div>
+    <div class="kpi-card orange"><div class="label">Montages en attente</div><div class="value">${mtg.filter(m=>m.statut==='en_attente').length}</div></div>
+    <div class="kpi-card red"><div class="label">Incidents ouverts</div><div class="value">${inc.filter(i=>!i.resolu).length}</div></div>
+    <div class="kpi-card orange"><div class="label">Erreurs non corrigées</div><div class="value">${ec.filter(e=>!e.corrigee).length}</div></div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="ttab('val',this)">✅ Validation saisies (${sai.length})</div>
+    <div class="tab" onclick="ttab('inc',this)">⚡ Incidents (${inc.length})</div>
+    <div class="tab" onclick="ttab('mtg',this)">🎬 Montages</div>
+    <div class="tab" onclick="ttab('cq',this)">🔍 Contrôle QC</div>
+    <div class="tab" onclick="ttab('ec',this)">📋 Checklist</div>
+  </div>
+  <div id="tt-val">${buildValTab(sai)}</div>
+  <div id="tt-inc" style="display:none"><div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openIncM()">+ Signaler incident</button></div>${buildIncTab(inc)}</div>
+  <div id="tt-mtg" style="display:none"><div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openMtgM()">+ Demande montage</button></div>${buildMtgTab(mtg)}</div>
+  <div id="tt-cq" style="display:none"><div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openCqM()">+ Contrôle qualité</button></div>${buildCqTab(cq)}</div>
+  <div id="tt-ec" style="display:none"><div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openEcM()">+ Signaler erreur</button></div>${buildEcTab(ec)}</div>`;
+  window._sesO2=sO;
+}
+function ttab(t,el){
+  document.querySelectorAll('.tabs .tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');
+  ['val','inc','mtg','cq','ec'].forEach(x=>{ const e=document.getElementById('tt-'+x);if(e)e.style.display=x===t?'block':'none';});
+}
+function buildValTab(saisies){
+  if(!saisies.length)return`<div class="empty"><div class="icon">✅</div>Aucune saisie à valider</div>`;
+  return`<div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Session</th><th>Agent</th><th>Fichier saisi</th><th>Durée saisie</th><th>Actions</th></tr></thead>
+    <tbody>${saisies.map(s=>`<tr>
+      <td>${fmtDate(s.sessions?.date_session)}<br><small>${s.sessions?.matieres?.nom||''}</small></td>
+      <td>${s.user_profiles?s.user_profiles.prenom+' '+s.user_profiles.nom:'—'}</td>
+      <td>${s.url_fichier_saisi?`<a href="${s.url_fichier_saisi}" target="_blank" style="color:var(--secondary)">📎 Voir</a>`:'—'}</td>
+      <td>${s.date_debut&&s.date_fin?Math.round((new Date(s.date_fin)-new Date(s.date_debut))/60000)+' min':'—'}</td>
+      <td>
+        <button class="btn btn-success btn-sm" onclick="valSaisie('${s.id}')">✔ Valider</button>
+        <button class="btn btn-danger btn-sm" onclick="rejSaisie('${s.id}')">✕ Rejeter</button>
+      </td>
+    </tr>`).join('')}</tbody></table></div></div>`;
+}
+async function valSaisie(id){const sc=prompt('Score qualité (0-10) :','8');if(sc===null)return;const {error}=await sb.from('saisies').update({statut:'validee',date_validation:new Date().toISOString(),score_qualite:parseFloat(sc)||0,valide_par:currentUser?.id}).eq('id',id);if(error)toast(error.message,'error');else{toast('Saisie validée ✔','success');renderTechnique();}}
+async function rejSaisie(id){const com=prompt('Motif de rejet :','');if(com===null)return;const {error}=await sb.from('saisies').update({statut:'rejetee',commentaire_qc:com}).eq('id',id);if(error)toast(error.message,'error');else{toast('Saisie rejetée','error');renderTechnique();}}
+function buildIncTab(inc){
+  if(!inc.length)return`<div class="empty"><div class="icon">⚡</div>Aucun incident enregistré</div>`;
+  return`<div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Session</th><th>Type</th><th>Durée</th><th>Signalé</th><th>Statut</th><th>Action</th></tr></thead>
+    <tbody>${inc.map(i=>`<tr>
+      <td>${fmtDate(i.sessions?.date_session)}<br><small>${i.sessions?.matieres?.nom||''}</small></td>
+      <td><span class="badge badge-orange">${(i.type_incident||'').replace(/_/g,' ')}</span></td>
+      <td>${i.duree_minutes?i.duree_minutes+' min':'—'}</td>
+      <td>${fmtDT(i.signale_le)}</td>
+      <td>${i.resolu?badge('realisee'):badge('ouvert')}</td>
+      <td>${!i.resolu?`<button class="btn btn-success btn-sm" onclick="resolveInc('${i.id}')">✔</button>`:'—'}</td>
+    </tr>`).join('')}</tbody></table></div></div>`;
+}
+function openIncM(){
+  openModal(`<div class="modal-title">⚡ Signaler incident live</div>
+  <div class="form-group"><label>Session</label><select id="im-s"><option value="">—</option>${window._sesO2||''}</select></div>
+  <div class="form-group"><label>Type</label><select id="im-t">
+    <option value="coupure_electricite">Coupure électricité</option><option value="probleme_micro">Problème micro</option>
+    <option value="connexion_internet">Connexion internet</option><option value="hors_sujet">Hors sujet</option>
+    <option value="parents">Intervention parents</option><option value="plateforme">Problème plateforme</option><option value="autre">Autre</option>
+  </select></div>
+  <div class="form-row">
+    <div class="form-group"><label>Durée (min)</label><input id="im-d" type="number" value="0"/></div>
+    <div class="form-group"><label>Résolu ?</label><select id="im-r"><option value="false">Non</option><option value="true">Oui</option></select></div>
+  </div>
+  <div class="form-group"><label>Description</label><textarea id="im-desc" rows="2"></textarea></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveInc()">💾</button></div>`);
+}
+async function saveInc(){
+  const {error}=await sb.from('incidents_lives').insert({session_id:document.getElementById('im-s').value||null,type_incident:document.getElementById('im-t').value,duree_minutes:parseInt(document.getElementById('im-d').value)||0,resolu:document.getElementById('im-r').value==='true',description:document.getElementById('im-desc').value||null,signale_par:currentUser?.id});
+  if(error)toast(error.message,'error');else{toast('Incident enregistré','success');closeModal();renderTechnique();}
+}
+async function resolveInc(id){const r=prompt('Résolution :','');if(r===null)return;await sb.from('incidents_lives').update({resolu:true,resolution:r}).eq('id',id);toast('Résolu','success');renderTechnique();}
+function buildMtgTab(mtg){
+  if(!mtg.length)return`<div class="empty"><div class="icon">🎬</div>Aucun montage</div>`;
+  return`<div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Session</th><th>Raison</th><th>Statut</th><th>Date limite</th><th>Vidéo</th><th>Action</th></tr></thead>
+    <tbody>${mtg.map(m=>`<tr>
+      <td>${fmtDate(m.sessions?.date_session)}<br><small>${m.sessions?.matieres?.nom||''} — ${m.sessions?.professeurs?.nom||''}</small></td>
+      <td>${m.raison||'—'}</td><td>${badge(m.statut)}</td><td>${fmtDT(m.date_limite)}</td>
+      <td>${m.url_video?`<a href="${m.url_video}" target="_blank" style="color:var(--secondary)">▶</a>`:'—'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="advMtg('${m.id}','${m.statut}')">→</button></td>
+    </tr>`).join('')}</tbody></table></div></div>`;
+}
+const MTS=['en_attente','en_cours','termine','publie'];
+async function advMtg(id,cur){
+  const idx=MTS.indexOf(cur);if(idx>=MTS.length-1){toast('Déjà publié','');return;}
+  const upd={statut:MTS[idx+1]};
+  if(idx===0)upd.date_debut=new Date().toISOString();
+  if(idx===1){upd.date_fin=new Date().toISOString();const u=prompt('URL vidéo finale :','');if(u)upd.url_video=u;}
+  const {error}=await sb.from('montages').update(upd).eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Montage avancé','success');renderTechnique();}
+}
+function openMtgM(){
+  openModal(`<div class="modal-title">🎬 Demande montage</div>
+  <div class="form-group"><label>Session</label><select id="mm-s"><option value="">—</option>${window._sesO2||''}</select></div>
+  <div class="form-group"><label>Raison</label><textarea id="mm-r" rows="2" placeholder="Ex: coupure à 45:00…"></textarea></div>
+  <div class="form-group"><label>Date limite</label><input id="mm-dl" type="datetime-local"/></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveMtg()">💾</button></div>`);
+}
+async function saveMtg(){
+  const {error}=await sb.from('montages').insert({session_id:document.getElementById('mm-s').value||null,raison:document.getElementById('mm-r').value||null,date_limite:document.getElementById('mm-dl').value||null,statut:'en_attente'});
+  if(error)toast(error.message,'error');else{toast('Montage créé','success');closeModal();renderTechnique();}
+}
+function buildCqTab(cq){
+  if(!cq.length)return`<div class="empty"><div class="icon">🔍</div>Aucun contrôle enregistré</div>`;
+  return`<div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Session</th><th>Phase</th><th>Technique</th><th>Pédagogie</th><th>Global</th><th>Prog.</th><th>Timing</th><th>Validation</th></tr></thead>
+    <tbody>${cq.map(q=>`<tr>
+      <td>${fmtDate(q.sessions?.date_session)}<br><small>${q.sessions?.matieres?.nom||''}</small></td>
+      <td><span class="badge badge-blue">${q.phase||'—'}</span></td>
+      <td>${q.score_technique!=null?q.score_technique+'/10':'—'}</td>
+      <td>${q.score_pedagogique!=null?q.score_pedagogique+'/10':'—'}</td>
+      <td>${q.score_global!=null?`<strong>${q.score_global}/10</strong>`:'—'}</td>
+      <td>${q.conformite_prog!=null?(q.conformite_prog?'✅':'❌'):'—'}</td>
+      <td>${q.respect_timing!=null?(q.respect_timing?'✅':'❌'):'—'}</td>
+      <td>${badge(q.statut_validation)}</td>
+    </tr>`).join('')}</tbody></table></div></div>`;
+}
+function openCqM(){
+  openModal(`<div class="modal-title">🔍 Contrôle Qualité</div>
+  <div class="form-group"><label>Session</label><select id="cq-s"><option value="">—</option>${window._sesO2||''}</select></div>
+  <div class="form-group"><label>Phase</label><select id="cq-ph"><option value="avant">Avant séance</option><option value="pendant">Pendant séance</option><option value="apres" selected>Après séance</option></select></div>
+  <div class="form-row">
+    <div class="form-group"><label>Score technique /10</label><input id="cq-st" type="number" min="0" max="10" step="0.5" value="8"/></div>
+    <div class="form-group"><label>Score pédagogique /10</label><input id="cq-sp" type="number" min="0" max="10" step="0.5" value="8"/></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Conformité programme</label><select id="cq-c"><option value="true">Oui</option><option value="false">Non</option></select></div>
+    <div class="form-group"><label>Respect timing</label><select id="cq-ti"><option value="true">Oui</option><option value="false">Non</option></select></div>
+  </div>
+  <div class="form-group"><label>Validation</label><select id="cq-v"><option value="valide">Validé</option><option value="rejete">Rejeté</option><option value="en_attente">En attente</option></select></div>
+  <div class="form-group"><label>Observations</label><textarea id="cq-o" rows="3"></textarea></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveCq()">💾</button></div>`);
+}
+async function saveCq(){
+  const st=parseFloat(document.getElementById('cq-st').value)||0;
+  const sp=parseFloat(document.getElementById('cq-sp').value)||0;
+  const {error}=await sb.from('controles_qualite').insert({session_id:document.getElementById('cq-s').value||null,phase:document.getElementById('cq-ph').value,score_technique:st,score_pedagogique:sp,score_global:Math.round((st+sp)/2*10)/10,conformite_prog:document.getElementById('cq-c').value==='true',respect_timing:document.getElementById('cq-ti').value==='true',statut_validation:document.getElementById('cq-v').value,observations:document.getElementById('cq-o').value||null,controleur_id:currentUser?.id});
+  if(error)toast(error.message,'error');else{toast('Contrôle QC enregistré','success');closeModal();renderTechnique();}
+}
+function buildEcTab(ec){
+  if(!ec.length)return`<div class="empty"><div class="icon">📋</div>Aucune erreur signalée</div>`;
+  return`<div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Session</th><th>Type erreur</th><th>Description</th><th>Signalé</th><th>Corrigée</th><th>Action</th></tr></thead>
+    <tbody>${ec.map(e=>`<tr>
+      <td>${fmtDate(e.sessions?.date_session)}<br><small>${e.sessions?.matieres?.nom||''}</small></td>
+      <td><span class="badge badge-orange">${(e.type_erreur||'').replace(/_/g,' ')}</span></td>
+      <td>${e.description||'—'}</td><td>${fmtDT(e.signale_le)}</td>
+      <td>${e.corrigee?badge('realisee'):badge('rejetee')}</td>
+      <td>${!e.corrigee?`<button class="btn btn-success btn-sm" onclick="fixEc('${e.id}')">✔</button>`:'—'}</td>
+    </tr>`).join('')}</tbody></table></div></div>`;
+}
+function openEcM(){
+  openModal(`<div class="modal-title">📋 Erreur checklist</div>
+  <div class="form-group"><label>Session</label><select id="ec-s"><option value="">—</option>${window._sesO2||''}</select></div>
+  <div class="form-group"><label>Type</label><select id="ec-t">
+    <option value="faute_frappe">Faute de frappe</option><option value="erreur_horaire">Erreur horaire</option>
+    <option value="erreur_nom_prof">Erreur nom prof</option><option value="erreur_matiere">Erreur matière</option>
+    <option value="erreur_groupe">Erreur groupe</option><option value="erreur_lien_live">Erreur lien live</option>
+    <option value="erreur_document">Erreur document</option>
+  </select></div>
+  <div class="form-group"><label>Description</label><textarea id="ec-d" rows="2"></textarea></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveEc()">💾</button></div>`);
+}
+async function saveEc(){
+  const {error}=await sb.from('erreurs_checklist').insert({session_id:document.getElementById('ec-s').value||null,type_erreur:document.getElementById('ec-t').value,description:document.getElementById('ec-d').value||null,signale_par:currentUser?.id});
+  if(error)toast(error.message,'error');else{toast('Erreur signalée','success');closeModal();renderTechnique();}
+}
+async function fixEc(id){
+  await sb.from('erreurs_checklist').update({corrigee:true,corrigee_le:new Date().toISOString()}).eq('id',id);
+  toast('Erreur corrigée','success');renderTechnique();
+}
+</script>
+<script>
+// ── FIDÉLISATION ───────────────────────────────────────────────────────
+async function renderFidelisation(){
+  const c=document.getElementById('content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  const [abR,cfR,elvR]=await Promise.all([
+    sb.from('absences').select('*,eleves(id,prenom,nom,telephone,telephone_parent),sessions(date_session,matieres(nom)),contacts_fidelisation(id)').order('created_at',{ascending:false}).limit(100),
+    sb.from('contacts_fidelisation').select('*,eleves(prenom,nom),user_profiles(prenom,nom)').order('created_at',{ascending:false}).limit(60),
+    sb.from('eleves').select('id,prenom,nom').eq('statut','actif').order('nom')
+  ]);
+  const abs=abR.data||[],contacts=cfR.data||[],elvs=elvR.data||[];
+  const nc=abs.filter(a=>!a.contacts_fidelisation?.length);
+  const eO=elvs.map(e=>`<option value="${e.id}">${e.nom} ${e.prenom}</option>`).join('');
+  const aO=abs.map(a=>`<option value="${a.id}">${fmtDate(a.sessions?.date_session)} — ${a.eleves?.nom||''} ${a.eleves?.prenom||''}</option>`).join('');
+  window._eO=eO; window._aO=aO;
+  c.innerHTML=`
+  <div class="kpi-grid">
+    <div class="kpi-card ${nc.length>5?'red':nc.length>0?'orange':'green'}"><div class="label">Absents non contactés</div><div class="value">${nc.length}</div></div>
+    <div class="kpi-card"><div class="label">Total absences</div><div class="value">${abs.length}</div></div>
+    <div class="kpi-card green"><div class="label">Contacts effectués</div><div class="value">${contacts.length}</div></div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" onclick="ftab('abs',this)">⚠️ À contacter (${nc.length})</div>
+    <div class="tab" onclick="ftab('hist',this)">📞 Historique</div>
+    <div class="tab" onclick="ftab('new',this)">➕ Nouveau contact</div>
+  </div>
+  <div id="ft-abs">
+    ${nc.length?`<div class="panel"><div class="tbl-wrap"><table>
+      <thead><tr><th>Élève</th><th>Session</th><th>Date absence</th><th>Téléphone élève</th><th>Téléphone parent</th><th>Action</th></tr></thead>
+      <tbody>${nc.map(a=>`<tr>
+        <td><strong>${a.eleves?a.eleves.nom+' '+a.eleves.prenom:'—'}</strong></td>
+        <td>${fmtDate(a.sessions?.date_session)} — ${a.sessions?.matieres?.nom||''}</td>
+        <td>${fmtDate(a.created_at)}</td>
+        <td>${a.eleves?.telephone||'—'}</td><td>${a.eleves?.telephone_parent||'—'}</td>
+        <td><button class="btn btn-primary btn-sm" onclick="openCfM('${a.eleves?.id||''}','${a.id}')">📞 Contacter</button></td>
+      </tr>`).join('')}
+      </tbody></table></div></div>`
+      :`<div class="empty"><div class="icon">✅</div>Tous les absents ont été contactés</div>`}
+  </div>
+  <div id="ft-hist" style="display:none">
+    <div class="panel"><div class="tbl-wrap"><table>
+      <thead><tr><th>Élève</th><th>Date contact</th><th>Mode</th><th>Satisfaction</th><th>Difficultés</th><th>Action suivante</th><th>Statut</th></tr></thead>
+      <tbody>${contacts.length?contacts.map(ct=>`<tr>
+        <td>${ct.eleves?ct.eleves.nom+' '+ct.eleves.prenom:'—'}</td>
+        <td>${fmtDT(ct.date_contact)}</td><td>${ct.mode_contact||'—'}</td>
+        <td>${ct.satisfaction?'⭐'.repeat(ct.satisfaction):'—'}</td>
+        <td style="max-width:140px;font-size:12px">${ct.difficultes||'—'}</td>
+        <td style="max-width:140px;font-size:12px">${ct.action_suivante||'—'}</td>
+        <td>${badge(ct.statut)}</td>
+      </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><div class="icon">📞</div>Aucun contact</div></td></tr>`}
+      </tbody></table></div></div>
+  </div>
+  <div id="ft-new" style="display:none">
+    <div class="panel">${renderCfForm('','')}</div>
+  </div>`;
+}
+function ftab(t,el){
+  document.querySelectorAll('.tabs .tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');
+  ['abs','hist','new'].forEach(x=>{const e=document.getElementById('ft-'+x);if(e)e.style.display=x===t?'block':'none';});
+}
+function renderCfForm(preElv,preAbs){return`
+  <div class="form-row">
+    <div class="form-group"><label>Élève</label><select id="cf-e"><option value="">— Choisir —</option>${window._eO||''}</select></div>
+    <div class="form-group"><label>Absence liée</label><select id="cf-a"><option value="">— Optionnel —</option>${window._aO||''}</select></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Date contact</label><input id="cf-dt" type="datetime-local" value="${new Date().toISOString().slice(0,16)}"/></div>
+    <div class="form-group"><label>Mode</label><select id="cf-m"><option value="telephone">Téléphone</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Satisfaction (1-5)</label><select id="cf-s"><option value="">—</option>${[1,2,3,4,5].map(n=>`<option value="${n}">${'⭐'.repeat(n)}</option>`).join('')}</select></div>
+    <div class="form-group"><label>Moyenne scolaire /20</label><input id="cf-moy" type="number" min="0" max="20" step="0.5"/></div>
+  </div>
+  <div class="form-group"><label>Difficultés signalées</label><textarea id="cf-d" rows="2"></textarea></div>
+  <div class="form-group"><label>Action suivante</label><textarea id="cf-ac" rows="2"></textarea></div>
+  <div style="margin-top:12px"><button class="btn btn-primary" onclick="saveCf('${preElv}','${preAbs}')">💾 Enregistrer</button></div>`;}
+function openCfM(eId,aId){
+  openModal(`<div class="modal-title">📞 Contact fidélisation</div>${renderCfForm(eId,aId)}`);
+  setTimeout(()=>{if(eId&&document.getElementById('cf-e'))document.getElementById('cf-e').value=eId;if(aId&&document.getElementById('cf-a'))document.getElementById('cf-a').value=aId;},80);
+}
+async function saveCf(preE,preA){
+  const eId=(document.getElementById('cf-e')?.value)||preE||null;
+  const aId=(document.getElementById('cf-a')?.value)||preA||null;
+  const moy=document.getElementById('cf-moy')?.value;
+  const {error}=await sb.from('contacts_fidelisation').insert({eleve_id:eId,absence_id:aId||null,date_contact:document.getElementById('cf-dt')?.value,mode_contact:document.getElementById('cf-m')?.value,satisfaction:document.getElementById('cf-s')?.value||null,moyenne_signee:moy?parseFloat(moy):null,difficultes:document.getElementById('cf-d')?.value||null,action_suivante:document.getElementById('cf-ac')?.value||null,agent_id:currentUser?.id,statut:'en_cours'});
+  if(!error&&moy&&eId)await sb.from('eleves').update({moyenne_scolaire:parseFloat(moy)}).eq('id',eId);
+  if(error)toast(error.message,'error');else{toast('Contact enregistré','success');closeModal();renderFidelisation();}
+}
+// ── PROFESSEURS ────────────────────────────────────────────────────────
+async function renderProfesseurs(){
+  const c=document.getElementById('content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  const [pR,sR]=await Promise.all([sb.from('professeurs').select('*,sieges(nom)').order('nom'),sb.from('sieges').select('id,nom').eq('actif',true)]);
+  const profs=pR.data||[],sigs=sR.data||[];
+  const sO=sigs.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('');
+  c.innerHTML=`<div style="margin-bottom:16px"><button class="btn btn-primary" onclick="openPrM(null,'${sO.replace(/'/g,"\\'")}')">+ Nouveau professeur</button></div>
+  <div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Nom</th><th>Email</th><th>Téléphone</th><th>Siège</th><th>Taux horaire</th><th>Recrutement</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${profs.length?profs.map(p=>`<tr>
+      <td><strong>${p.nom} ${p.prenom}</strong></td><td>${p.email||'—'}</td><td>${p.telephone||'—'}</td>
+      <td>${p.sieges?.nom||'—'}</td><td>${p.taux_horaire?p.taux_horaire+' DA/h':'—'}</td>
+      <td>${fmtDate(p.date_recrutement)}</td>
+      <td>${p.actif?badge('actif'):badge('inactif')}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="openPrM(${JSON.stringify(p).replace(/"/g,'&quot;')},'${sO.replace(/'/g,"\\'")}')">✏️</button></td>
+    </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><div class="icon">👨‍🏫</div>Aucun professeur</div></td></tr>`}
+    </tbody></table></div></div>`;
+}
+function openPrM(p,sO){
+  openModal(`<div class="modal-title">${p?'Modifier':'Nouveau'} professeur</div>
+  <input type="hidden" id="pr-id" value="${p?.id||''}"/>
+  <div class="form-row"><div class="form-group"><label>Prénom</label><input id="pr-pn" value="${p?.prenom||''}"/></div><div class="form-group"><label>Nom</label><input id="pr-nm" value="${p?.nom||''}"/></div></div>
+  <div class="form-row"><div class="form-group"><label>Email</label><input id="pr-em" type="email" value="${p?.email||''}"/></div><div class="form-group"><label>Téléphone</label><input id="pr-tel" value="${p?.telephone||''}"/></div></div>
+  <div class="form-row"><div class="form-group"><label>Siège</label><select id="pr-sg"><option value="">—</option>${sO}</select></div><div class="form-group"><label>Taux horaire DA</label><input id="pr-tx" type="number" value="${p?.taux_horaire||0}"/></div></div>
+  <div class="form-group"><label>Date recrutement</label><input id="pr-dr" type="date" value="${p?.date_recrutement||''}"/></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="savePr()">💾</button></div>`);
+  if(p?.siege_id)setTimeout(()=>document.getElementById('pr-sg').value=p.siege_id,60);
+}
+async function savePr(){
+  const id=document.getElementById('pr-id').value;
+  const payload={prenom:document.getElementById('pr-pn').value,nom:document.getElementById('pr-nm').value,email:document.getElementById('pr-em').value||null,telephone:document.getElementById('pr-tel').value||null,siege_id:document.getElementById('pr-sg').value||null,taux_horaire:parseFloat(document.getElementById('pr-tx').value)||0,date_recrutement:document.getElementById('pr-dr').value||null};
+  const {error}=id?await sb.from('professeurs').update(payload).eq('id',id):await sb.from('professeurs').insert(payload);
+  if(error)toast(error.message,'error');else{toast('Professeur enregistré','success');closeModal();renderProfesseurs();}
+}
+// ── ÉLÈVES ─────────────────────────────────────────────────────────────
+async function renderEleves(){
+  const c=document.getElementById('content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  const [eR,clR]=await Promise.all([sb.from('eleves').select('*,niveaux_classes(niveau,classe)').order('nom'),sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true)]);
+  const elvs=eR.data||[],cls=clR.data||[];
+  const cO=cls.map(cl=>`<option value="${cl.id}">${cl.niveau} ${cl.classe||''}</option>`).join('');
+  c.innerHTML=`<div style="margin-bottom:16px"><button class="btn btn-primary" onclick="openElM(null,'${cO.replace(/'/g,"\\'")}')">+ Nouvel élève</button></div>
+  <div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Nom</th><th>Classe</th><th>Téléphone</th><th>Téléphone parent</th><th>Inscription</th><th>Moyenne</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${elvs.length?elvs.map(e=>`<tr>
+      <td><strong>${e.nom} ${e.prenom}</strong></td>
+      <td>${e.niveaux_classes?e.niveaux_classes.niveau+' '+(e.niveaux_classes.classe||''):'—'}</td>
+      <td>${e.telephone||'—'}</td><td>${e.telephone_parent||'—'}</td>
+      <td>${fmtDate(e.date_inscription)}</td>
+      <td>${e.moyenne_scolaire!=null?e.moyenne_scolaire+'/20':'—'}</td>
+      <td>${badge(e.statut)}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="openElM(${JSON.stringify(e).replace(/"/g,'&quot;')},'${cO.replace(/'/g,"\\'")}')">✏️</button></td>
+    </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><div class="icon">🎒</div>Aucun élève</div></td></tr>`}
+    </tbody></table></div></div>`;
+}
+function openElM(e,cO){
+  openModal(`<div class="modal-title">${e?'Modifier':'Nouvel'} élève</div>
+  <input type="hidden" id="el-id" value="${e?.id||''}"/>
+  <div class="form-row"><div class="form-group"><label>Prénom</label><input id="el-pn" value="${e?.prenom||''}"/></div><div class="form-group"><label>Nom</label><input id="el-nm" value="${e?.nom||''}"/></div></div>
+  <div class="form-row"><div class="form-group"><label>Tél. élève</label><input id="el-tel" value="${e?.telephone||''}"/></div><div class="form-group"><label>Tél. parent</label><input id="el-tp" value="${e?.telephone_parent||''}"/></div></div>
+  <div class="form-row"><div class="form-group"><label>Classe</label><select id="el-cl"><option value="">—</option>${cO}</select></div><div class="form-group"><label>Statut</label><select id="el-st"><option value="actif">Actif</option><option value="inactif">Inactif</option><option value="suspendu">Suspendu</option><option value="resilie">Résilié</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label>Moyenne /20</label><input id="el-moy" type="number" min="0" max="20" step="0.5" value="${e?.moyenne_scolaire||''}"/></div><div class="form-group"><label>Email</label><input id="el-em" value="${e?.email||''}"/></div></div>
+  <div class="form-group"><label>Établissement scolaire</label><input id="el-et" value="${e?.etablissement_scolaire||''}"/></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveEl()">💾</button></div>`);
+  if(e?.classe_id)setTimeout(()=>{document.getElementById('el-cl').value=e.classe_id;document.getElementById('el-st').value=e.statut||'actif';},60);
+}
+async function saveEl(){
+  const id=document.getElementById('el-id').value;
+  const m=document.getElementById('el-moy').value;
+  const payload={prenom:document.getElementById('el-pn').value,nom:document.getElementById('el-nm').value,telephone:document.getElementById('el-tel').value||null,telephone_parent:document.getElementById('el-tp').value||null,email:document.getElementById('el-em').value||null,classe_id:document.getElementById('el-cl').value||null,statut:document.getElementById('el-st').value,moyenne_scolaire:m?parseFloat(m):null,etablissement_scolaire:document.getElementById('el-et').value||null};
+  const {error}=id?await sb.from('eleves').update(payload).eq('id',id):await sb.from('eleves').insert(payload);
+  if(error)toast(error.message,'error');else{toast('Élève enregistré','success');closeModal();renderEleves();}
+}
+</script>
+<script>
+// ── SALAIRES ───────────────────────────────────────────────────────────
+async function renderSalaires(){
+  const c=document.getElementById('content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  const [sR]=await Promise.all([sb.from('salaires').select('*,professeurs(prenom,nom)').order('mois',{ascending:false}).order('created_at',{ascending:false})]);
+  const sal=sR.data||[];
+  const mOpts=[...Array(6)].map((_,i)=>{const d=new Date();d.setMonth(d.getMonth()-i);const v=d.toISOString().slice(0,8)+'01';return`<option value="${v}">${d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</option>`;}).join('');
+  c.innerHTML=`
+  <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <select id="sal-m" style="padding:8px 12px;border:1.5px solid #DDE3EA;border-radius:6px">${mOpts}</select>
+    <button class="btn btn-primary" onclick="calcSal()">🔄 Calculer salaires</button>
+  </div>
+  <div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Professeur</th><th>Mois</th><th>Sessions</th><th>Heures</th><th>Taux</th><th>Montant brut</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${sal.length?sal.map(s=>`<tr>
+      <td><strong>${s.professeurs?s.professeurs.nom+' '+s.professeurs.prenom:'—'}</strong></td>
+      <td>${new Date(s.mois).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</td>
+      <td>${s.nb_sessions||0}</td><td>${s.nb_heures||0} h</td><td>${s.taux_horaire||0} DA/h</td>
+      <td><strong>${(s.montant_brut||0).toLocaleString('fr-FR')} DA</strong></td>
+      <td>${badge(s.statut)}</td>
+      <td>
+        ${s.statut==='calcule'?`<button class="btn btn-success btn-sm" onclick="valSal('${s.id}')">✔ Valider</button>`:''}
+        ${s.statut==='valide'?`<button class="btn btn-primary btn-sm" onclick="paySal('${s.id}')">💳 Payer</button>`:''}
+      </td>
+    </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><div class="icon">💰</div>Aucun salaire calculé<br><small>Sélectionner un mois et calculer</small></div></td></tr>`}
+    </tbody></table></div></div>`;
+}
+async function calcSal(){
+  const mois=document.getElementById('sal-m').value;
+  const {data:profs}=await sb.from('professeurs').select('id,prenom,nom,taux_horaire').eq('actif',true);
+  if(!profs?.length){toast('Aucun professeur actif','');return;}
+  const moisF=new Date(mois);moisF.setMonth(moisF.getMonth()+1);const moisFs=moisF.toISOString().split('T')[0];
+  let n=0;
+  for(const p of profs){
+    const {data:ses}=await sb.from('sessions').select('heure_debut,heure_fin').eq('professeur_id',p.id).eq('statut','realisee').gte('date_session',mois).lt('date_session',moisFs);
+    if(!ses?.length)continue;
+    const nh=ses.reduce((t,s)=>{const[hd,md]=(s.heure_debut||'00:00').split(':').map(Number);const[hf,mf]=(s.heure_fin||'00:00').split(':').map(Number);return t+((hf*60+mf)-(hd*60+md))/60;},0);
+    await sb.from('salaires').upsert({professeur_id:p.id,mois,nb_sessions:ses.length,nb_heures:Math.round(nh*100)/100,taux_horaire:p.taux_horaire||0,montant_brut:Math.round(nh*(p.taux_horaire||0)*100)/100,statut:'calcule'},{onConflict:'professeur_id,mois'});
+    n++;
+  }
+  toast(`Salaires calculés pour ${n} professeur(s)  — ${mois}`,'success');renderSalaires();
+}
+async function valSal(id){const {error}=await sb.from('salaires').update({statut:'valide',valide_par:currentUser?.id}).eq('id',id);if(error)toast(error.message,'error');else{toast('Validé','success');renderSalaires();}}
+async function paySal(id){const d=prompt('Date paiement (AAAA-MM-JJ) :',today());if(!d)return;const {error}=await sb.from('salaires').update({statut:'paye',date_paiement:d}).eq('id',id);if(error)toast(error.message,'error');else{toast('Paiement enregistré','success');renderSalaires();}}
+
+// ── RÉFÉRENTIELS ───────────────────────────────────────────────────────
+async function renderReferentiels(){
+  const c=document.getElementById('content');
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  const [sgR,slR,mR,clR]=await Promise.all([sb.from('sieges').select('*').order('nom'),sb.from('salles').select('*,sieges(nom)').order('nom'),sb.from('matieres').select('*').order('nom'),sb.from('niveaux_classes').select('*,sieges(nom)').order('niveau')]);
+  c.innerHTML=`
+  <div class="tabs">
+    <div class="tab active" onclick="rtab('sg',this)">🏢 Sièges</div>
+    <div class="tab" onclick="rtab('sl',this)">🚪 Salles</div>
+    <div class="tab" onclick="rtab('ma',this)">📚 Matières</div>
+    <div class="tab" onclick="rtab('cl',this)">🎓 Classes</div>
+  </div>
+  <div id="rt-sg">
+    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openSgM()">+ Siège</button></div>
+    <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Nom</th><th>Ville</th><th>Adresse</th></tr></thead>
+    <tbody>${(sgR.data||[]).map(s=>`<tr><td><strong>${s.nom}</strong></td><td>${s.ville||'—'}</td><td>${s.adresse||'—'}</td></tr>`).join('')}</tbody></table></div></div>
+  </div>
+  <div id="rt-sl" style="display:none">
+    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openSlM()">+ Salle</button></div>
+    <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Nom</th><th>Siège</th><th>Capacité</th><th>Postes info</th></tr></thead>
+    <tbody>${(slR.data||[]).map(s=>`<tr><td><strong>${s.nom}</strong></td><td>${s.sieges?.nom||'—'}</td><td>${s.capacite||'—'}</td><td>${s.nb_postes_info||0}</td></tr>`).join('')}</tbody></table></div></div>
+  </div>
+  <div id="rt-ma" style="display:none">
+    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openMaM()">+ Matière</button></div>
+    <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Nom</th><th>Code</th><th>Actif</th></tr></thead>
+    <tbody>${(mR.data||[]).map(m=>`<tr><td><strong>${m.nom}</strong></td><td><span class="badge badge-blue">${m.code||'—'}</span></td><td>${m.actif?'✅':'❌'}</td></tr>`).join('')}</tbody></table></div></div>
+  </div>
+  <div id="rt-cl" style="display:none">
+    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openClM()">+ Classe</button></div>
+    <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Niveau</th><th>Classe</th><th>Siège</th><th>Effectif</th><th>Année</th></tr></thead>
+    <tbody>${(clR.data||[]).map(cl=>`<tr><td>${cl.niveau}</td><td>${cl.classe||'—'}</td><td>${cl.sieges?.nom||'—'}</td><td>${cl.effectif||0}</td><td>${cl.annee_scolaire||'—'}</td></tr>`).join('')}</tbody></table></div></div>
+  </div>`;
+}
+function rtab(t,el){
+  document.querySelectorAll('.tabs .tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');
+  ['sg','sl','ma','cl'].forEach(x=>{const e=document.getElementById('rt-'+x);if(e)e.style.display=x===t?'block':'none';});
+}
+function openSgM(){openModal(`<div class="modal-title">🏢 Nouveau siège</div><div class="form-group"><label>Nom</label><input id="sg-n" placeholder="Siège Central"/></div><div class="form-group"><label>Ville</label><input id="sg-v"/></div><div class="form-group"><label>Adresse</label><textarea id="sg-a" rows="2"></textarea></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveSg()">💾</button></div>`);}
+async function saveSg(){const {error}=await sb.from('sieges').insert({nom:document.getElementById('sg-n').value,ville:document.getElementById('sg-v').value||null,adresse:document.getElementById('sg-a').value||null});if(error)toast(error.message,'error');else{toast('Siège créé','success');closeModal();renderReferentiels();}}
+function openSlM(){openModal(`<div class="modal-title">🚪 Nouvelle salle</div><div class="form-group"><label>Nom</label><input id="sl-n" placeholder="Salle A"/></div><div class="form-row"><div class="form-group"><label>Capacité</label><input id="sl-c" type="number" value="20"/></div><div class="form-group"><label>Postes info</label><input id="sl-p" type="number" value="0"/></div></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveSl()">💾</button></div>`);}
+async function saveSl(){const {error}=await sb.from('salles').insert({nom:document.getElementById('sl-n').value,capacite:parseInt(document.getElementById('sl-c').value)||20,nb_postes_info:parseInt(document.getElementById('sl-p').value)||0});if(error)toast(error.message,'error');else{toast('Salle créée','success');closeModal();renderReferentiels();}}
+function openMaM(){openModal(`<div class="modal-title">📚 Nouvelle matière</div><div class="form-row"><div class="form-group"><label>Nom</label><input id="ma-n" placeholder="Mathématiques"/></div><div class="form-group"><label>Code</label><input id="ma-c" placeholder="MATH"/></div></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveMa()">💾</button></div>`);}
+async function saveMa(){const {error}=await sb.from('matieres').insert({nom:document.getElementById('ma-n').value,code:document.getElementById('ma-c').value.toUpperCase()||null});if(error)toast(error.message,'error');else{toast('Matière créée','success');closeModal();renderReferentiels();}}
+function openClM(){openModal(`<div class="modal-title">🎓 Nouvelle classe</div><div class="form-row"><div class="form-group"><label>Niveau</label><input id="cl-n" placeholder="3ème"/></div><div class="form-group"><label>Classe</label><input id="cl-c" placeholder="A"/></div></div><div class="form-row"><div class="form-group"><label>Effectif</label><input id="cl-e" type="number" value="25"/></div><div class="form-group"><label>Année scolaire</label><input id="cl-a" value="2025-2026"/></div></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveCl()">💾</button></div>`);}
+async function saveCl(){const {error}=await sb.from('niveaux_classes').insert({niveau:document.getElementById('cl-n').value,classe:document.getElementById('cl-c').value||null,effectif:parseInt(document.getElementById('cl-e').value)||0,annee_scolaire:document.getElementById('cl-a').value||'2025-2026'});if(error)toast(error.message,'error');else{toast('Classe créée','success');closeModal();renderReferentiels();}}
+
+// ── INIT ───────────────────────────────────────────────────────────────
+sb.auth.getSession();
+</script>
+</body>
+</html>
