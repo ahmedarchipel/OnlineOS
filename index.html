@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Archipel Online OS</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="config.js"></script>
 <style>
@@ -225,8 +225,24 @@ canvas{max-height:200px;}
 <div id="toast"></div>
 <script>
 // ── Init ──────────────────────────────────────────────────────────────
+if(!SUPABASE_URL || SUPABASE_URL.includes('VOTRE-PROJET') ||
+   !SUPABASE_KEY || SUPABASE_KEY.includes('VOTRE-ANON-KEY')){
+  document.body.innerHTML=`<div style="font-family:sans-serif;padding:40px;max-width:500px;margin:60px auto;background:#fff;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,.12)">
+    <h2 style="color:#E74C3C;margin-bottom:12px">⚙️ Configuration manquante</h2>
+    <p>Modifiez <strong>config.js</strong> avec vos identifiants Supabase :</p>
+    <pre style="background:#f4f4f4;padding:12px;border-radius:6px;font-size:12px;overflow:auto;margin:12px 0">
+const SUPABASE_URL = 'https://xxxx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_...';</pre>
+    <p style="font-size:13px;color:#555">Trouvez ces valeurs dans <br/>
+    <strong>Supabase → Settings → API</strong></p>
+  </div>`;
+  throw new Error('Supabase not configured');
+}
 const {createClient} = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  global: { headers: { apikey: SUPABASE_KEY } },
+  auth:   { persistSession: true, autoRefreshToken: true }
+});
 let currentUser=null, currentProfile=null;
 
 function today(){return new Date().toISOString().split('T')[0];}
