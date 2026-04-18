@@ -608,10 +608,10 @@ function filterP(){
   const pOpts=PD.profs.map(p=>`<option value="${p.id}">${p.nom} ${p.prenom}</option>`).join('');
   const clOpts=PD.classes.map(cl=>`<option value="${cl.id}">${cl.niveau} ${cl.classe||''}</option>`).join('');
   const c=document.getElementById('content');
-  if(\!c)return;
+  if(!c)return;
   // Re-render just the table inside existing panel
   const tbody=c.querySelector('tbody');
-  if(\!tbody)return renderPlanifList(fm,fp,fc,fst);
+  if(!tbody)return renderPlanifList(fm,fp,fc,fst);
   tbody.innerHTML=ses.length?ses.map(s=>`
     <tr>
       <td><strong>${fmtDate(s.date_session)}</strong></td>
@@ -693,7 +693,7 @@ async function saveSes(){
     :await sb.from('sessions').insert(payload).select().single();
   if(error){toast(error.message,'error');return;}
   // Auto-create series_document entry for each new session
-  if(\!id && data?.id){
+  if(!id && data?.id){
     await sb.from('series_documents').insert({
       session_id:data.id,
       professeur_id:payload.professeur_id,
@@ -712,7 +712,7 @@ async function setStatut(id,statut){
   if(error)toast(error.message,'error');else{toast('Statut : '+statut,'success');renderPlanification();}
 }
 async function delSes(id){
-  if(\!confirm('Supprimer cette séance ? (les documents liés seront aussi supprimés)'))return;
+  if(!confirm('Supprimer cette séance ? (les documents liés seront aussi supprimés)'))return;
   await sb.from('series_documents').delete().eq('session_id',id);
   const {error}=await sb.from('sessions').delete().eq('id',id);
   if(error)toast(error.message,'error');else{toast('Séance supprimée','success');renderPlanification();}
@@ -785,8 +785,8 @@ function renderSaisieList(fm,fp,fst){
         <td>${pipe(d.statut)}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-outline btn-sm" title="Modifier" onclick="openDocEdit('${d.id}')">✏️</button>
-          ${d.statut\!=='publie'?`<button class="btn btn-primary btn-sm" title="Avancer statut" onclick="advDoc('${d.id}','${d.statut}')">→</button>`:''}
-          ${d.statut\!=='non_envoye'?`<button class="btn btn-sm" style="background:#e17055;color:#fff" title="Reculer statut" onclick="backDoc('${d.id}','${d.statut}')">←</button>`:''}
+          ${d.statut!=='publie'?`<button class="btn btn-primary btn-sm" title="Avancer statut" onclick="advDoc('${d.id}','${d.statut}')">→</button>`:''}
+          ${d.statut!=='non_envoye'?`<button class="btn btn-sm" style="background:#e17055;color:#fff" title="Reculer statut" onclick="backDoc('${d.id}','${d.statut}')">←</button>`:''}
           <button class="btn btn-sm" style="background:#636e72;color:#fff" title="Supprimer" onclick="delDoc('${d.id}')">🗑</button>
         </td>
       </tr>`).join(''):`<tr><td colspan="9"><div class="empty"><div class="icon">📂</div>Aucun document enregistré</div></td></tr>`}
@@ -813,7 +813,7 @@ async function advDoc(id,cur){
   if(dateField)upd[dateField]=new Date().toISOString();
   if(nextSt==='en_attente'){
     const fmt=prompt('Format du document reçu :\n(PDF / PPT / scan / image / ancien_doc / autre)','PDF');
-    if(\!fmt)return;
+    if(!fmt)return;
     upd.format_document=fmt;
     upd.date_reception=new Date().toISOString();
     const q=prompt('Qualité du document (1-5) :','4');
@@ -829,7 +829,7 @@ async function backDoc(id,cur){
   if(error)toast(error.message,'error');else{toast('← '+DS[idx-1].replace(/_/g,' '),'success');renderSaisie();}
 }
 async function delDoc(id){
-  if(\!confirm('Supprimer ce document ?'))return;
+  if(!confirm('Supprimer ce document ?'))return;
   const {error}=await sb.from('series_documents').delete().eq('id',id);
   if(error)toast(error.message,'error');else{toast('Supprimé','success');renderSaisie();}
 }
@@ -854,16 +854,16 @@ function openDocManual(){
 }
 async function saveDocManual(){
   const sesId=document.getElementById('d-s').value;
-  if(\!sesId){toast('Choisir une session','error');return;}
+  if(!sesId){toast('Choisir une session','error');return;}
   // Get prof from session if not specified
   let profId=document.getElementById('d-p').value||null;
-  if(\!profId){const {data}=await sb.from('sessions').select('professeur_id').eq('id',sesId).single();profId=data?.professeur_id||null;}
+  if(!profId){const {data}=await sb.from('sessions').select('professeur_id').eq('id',sesId).single();profId=data?.professeur_id||null;}
   const {error}=await sb.from('series_documents').upsert({session_id:sesId,professeur_id:profId,format_document:document.getElementById('d-f').value,qualite_doc:document.getElementById('d-q').value||null,date_reception:document.getElementById('d-dt').value,url_fichier:document.getElementById('d-u').value||null,notes:document.getElementById('d-n').value||null,statut:'en_attente'},{onConflict:'session_id'});
   if(error)toast(error.message,'error');else{toast('Document enregistré','success');closeModal();renderSaisie();}
 }
 function openDocEdit(id){
   const doc=(window._SD.docs||[]).find(d=>d.id===id);
-  if(\!doc)return;
+  if(!doc)return;
   openModal(`
   <div class="modal-title">✏️ Modifier document</div>
   <div class="form-row">
@@ -890,7 +890,7 @@ function openDocEdit(id){
 async function saveDocEdit(id){
   const st=document.getElementById('de-st').value;
   const upd={format_document:document.getElementById('de-f').value,qualite_doc:document.getElementById('de-q').value||null,statut:st,date_reception:document.getElementById('de-dt').value||null,url_fichier:document.getElementById('de-u').value||null,notes:document.getElementById('de-n').value||null};
-  if(st in DS_DATES && \!upd[DS_DATES[st]])upd[DS_DATES[st]]=new Date().toISOString();
+  if(st in DS_DATES && !upd[DS_DATES[st]])upd[DS_DATES[st]]=new Date().toISOString();
   const {error}=await sb.from('series_documents').update(upd).eq('id',id);
   if(error)toast(error.message,'error');else{toast('Document mis à jour','success');closeModal();renderSaisie();}
 }
@@ -1224,7 +1224,7 @@ function openPrM(p){
   <div class="form-row"><div class="form-group"><label>Prénom</label><input id="pr-pn" value="${p?.prenom||''}"/></div><div class="form-group"><label>Nom</label><input id="pr-nm" value="${p?.nom||''}"/></div></div>
   <div class="form-row"><div class="form-group"><label>Email</label><input id="pr-em" type="email" value="${p?.email||''}"/></div><div class="form-group"><label>Téléphone</label><input id="pr-tel" value="${p?.telephone||''}"/></div></div>
   <div class="form-row"><div class="form-group"><label>Siège</label><select id="pr-sg"><option value="">—</option>${sO}</select></div><div class="form-group"><label>Taux horaire DA/h</label><input id="pr-tx" type="number" value="${p?.taux_horaire||0}"/></div></div>
-  <div class="form-row"><div class="form-group"><label>Date recrutement</label><input id="pr-dr" type="date" value="${p?.date_recrutement||''}"/></div><div class="form-group"><label>Statut</label><select id="pr-ac"><option value="true" ${p?.actif\!==false?'selected':''}>Actif</option><option value="false" ${p?.actif===false?'selected':''}>Inactif</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label>Date recrutement</label><input id="pr-dr" type="date" value="${p?.date_recrutement||''}"/></div><div class="form-group"><label>Statut</label><select id="pr-ac"><option value="true" ${p?.actif!==false?'selected':''}>Actif</option><option value="false" ${p?.actif===false?'selected':''}>Inactif</option></select></div></div>
   <div class="form-group"><label>Spécialité / Notes</label><textarea id="pr-no" rows="2">${p?.notes||''}</textarea></div>
   <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="savePr()">💾 Enregistrer</button></div>`);
 }
@@ -1235,11 +1235,11 @@ async function savePr(){
   if(error)toast(error.message,'error');else{toast('Professeur enregistré','success');closeModal();renderProfesseurs();}
 }
 async function toggleProfActif(id,cur){
-  const {error}=await sb.from('professeurs').update({actif:\!cur}).eq('id',id);
+  const {error}=await sb.from('professeurs').update({actif:!cur}).eq('id',id);
   if(error)toast(error.message,'error');else{toast(cur?'Professeur désactivé':'Professeur activé','success');renderProfesseurs();}
 }
 async function delProf(id,nom){
-  if(\!confirm(`Supprimer le professeur "${nom}" ? Cette action est irréversible.`))return;
+  if(!confirm(`Supprimer le professeur "${nom}" ? Cette action est irréversible.`))return;
   const {error}=await sb.from('professeurs').delete().eq('id',id);
   if(error)toast(error.message,'error');else{toast('Professeur supprimé','success');renderProfesseurs();}
 }
@@ -1278,7 +1278,7 @@ function renderElvList(fs,fcl,fst){
       <td>${e.niveaux_classes?e.niveaux_classes.niveau+' '+(e.niveaux_classes.classe||''):'—'}</td>
       <td>${e.telephone||'—'}</td><td>${e.telephone_parent||'—'}</td>
       <td>${fmtDate(e.date_inscription)}</td>
-      <td>${e.moyenne_scolaire\!=null?`<strong>${e.moyenne_scolaire}/20</strong>`:'—'}</td>
+      <td>${e.moyenne_scolaire!=null?`<strong>${e.moyenne_scolaire}/20</strong>`:'—'}</td>
       <td>${badge(e.statut||'actif')}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-outline btn-sm" onclick="openElM(${JSON.stringify(e).replace(/"/g,'&quot;')})">✏️</button>
@@ -1293,7 +1293,7 @@ function openElM(e){
   <input type="hidden" id="el-id" value="${e?.id||''}"/>
   <div class="form-row"><div class="form-group"><label>Prénom</label><input id="el-pn" value="${e?.prenom||''}"/></div><div class="form-group"><label>Nom</label><input id="el-nm" value="${e?.nom||''}"/></div></div>
   <div class="form-row"><div class="form-group"><label>Tél. élève</label><input id="el-tel" value="${e?.telephone||''}"/></div><div class="form-group"><label>Tél. parent</label><input id="el-tp" value="${e?.telephone_parent||''}"/></div></div>
-  <div class="form-row"><div class="form-group"><label>Classe</label><select id="el-cl"><option value="">—</option>${cO}</select></div><div class="form-group"><label>Statut</label><select id="el-st"><option value="actif" ${(\!e||e?.statut==='actif')?'selected':''}>Actif</option><option value="inactif" ${e?.statut==='inactif'?'selected':''}>Inactif</option><option value="suspendu" ${e?.statut==='suspendu'?'selected':''}>Suspendu</option><option value="resilie" ${e?.statut==='resilie'?'selected':''}>Résilié</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label>Classe</label><select id="el-cl"><option value="">—</option>${cO}</select></div><div class="form-group"><label>Statut</label><select id="el-st"><option value="actif" ${(!e||e?.statut==='actif')?'selected':''}>Actif</option><option value="inactif" ${e?.statut==='inactif'?'selected':''}>Inactif</option><option value="suspendu" ${e?.statut==='suspendu'?'selected':''}>Suspendu</option><option value="resilie" ${e?.statut==='resilie'?'selected':''}>Résilié</option></select></div></div>
   <div class="form-row"><div class="form-group"><label>Moyenne /20</label><input id="el-moy" type="number" min="0" max="20" step="0.5" value="${e?.moyenne_scolaire||''}"/></div><div class="form-group"><label>Email</label><input id="el-em" type="email" value="${e?.email||''}"/></div></div>
   <div class="form-row"><div class="form-group"><label>Établissement</label><input id="el-et" value="${e?.etablissement_scolaire||''}"/></div><div class="form-group"><label>Date inscription</label><input id="el-di" type="date" value="${e?.date_inscription||today()}"/></div></div>
   <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveEl()">💾 Enregistrer</button></div>`);
@@ -1306,7 +1306,7 @@ async function saveEl(){
   if(error)toast(error.message,'error');else{toast('Élève enregistré','success');closeModal();renderEleves();}
 }
 async function delElv(id,nom){
-  if(\!confirm(`Supprimer l'élève "${nom}" ? Cette action est irréversible.`))return;
+  if(!confirm(`Supprimer l'élève "${nom}" ? Cette action est irréversible.`))return;
   const {error}=await sb.from('eleves').delete().eq('id',id);
   if(error)toast(error.message,'error');else{toast('Élève supprimé','success');renderEleves();}
 }
@@ -1325,15 +1325,15 @@ async function renderSalaires(){
   ]);
   const salaires=sR.data||[],profs=pR.data||[],sessions=sesR.data||[];
   // Build months list
-  const moisList=[...new Set(salaires.map(s=>s.mois).concat([new Date().toISOString().slice(0,7),...Array.from({length:5},(_,i)=>{const d=new Date();d.setMonth(d.getMonth()-i-1);return d.toISOString().slice(0,7);})])].filter(Boolean))].sort().reverse();
+  const moisList=[...new Set([...salaires.map(s=>s.mois),new Date().toISOString().slice(0,7),...Array.from({length:5},(_,i)=>{const d=new Date();d.setMonth(d.getMonth()-i-1);return d.toISOString().slice(0,7);})].filter(Boolean))].sort().reverse();
   const mOpts=moisList.map(m=>`<option value="${m}" ${m===mois?'selected':''}>${m}</option>`).join('');
   // Sessions for selected month
   const sesMois=sessions.filter(s=>s.date_session?.startsWith(mois));
   // Group by prof
   const profMap={};
   sesMois.forEach(s=>{
-    if(\!s.professeur_id)return;
-    if(\!profMap[s.professeur_id])profMap[s.professeur_id]={sessions:[],heures:0};
+    if(!s.professeur_id)return;
+    if(!profMap[s.professeur_id])profMap[s.professeur_id]={sessions:[],heures:0};
     profMap[s.professeur_id].sessions.push(s);
     if(s.heure_debut&&s.heure_fin){
       const[h1,m1]=s.heure_debut.split(':').map(Number);
@@ -1375,7 +1375,7 @@ async function renderSalaires(){
           <td>${sal?badge(sal.statut):pm.sessions.length>0?'<span class="badge badge-orange">non calculé</span>':'<span class="badge badge-grey">aucune séance</span>'}</td>
           <td>${sal?.date_paiement?fmtDate(sal.date_paiement):'—'}</td>
           <td style="white-space:nowrap">
-            ${pm.sessions.length>0&&(\!sal||sal.statut\!=='paye')?`<button class="btn btn-success btn-sm" onclick="marquerPaye('${p.id}','${mois}')">✔ Marquer payé</button>`:''}
+            ${pm.sessions.length>0&&(!sal||sal.statut!=='paye')?`<button class="btn btn-success btn-sm" onclick="marquerPaye('${p.id}','${mois}')">✔ Marquer payé</button>`:''}
             ${sal?`<button class="btn btn-outline btn-sm" onclick="voirDetailSal('${p.id}','${mois}')">📋 Détail</button>`:''}
           </td>
         </tr>`;
@@ -1387,11 +1387,11 @@ async function renderSalaires(){
 }
 async function calcSalaires(mois){
   const {profs,profMap}=window._salData||{};
-  if(\!profs){toast('Rechargez la page','error');return;}
+  if(!profs){toast('Rechargez la page','error');return;}
   let ok=0;
   for(const p of profs){
     const pm=profMap[p.id];
-    if(\!pm||pm.sessions.length===0)continue;
+    if(!pm||pm.sessions.length===0)continue;
     const montant=pm.heures*(p.taux_horaire||0);
     const {error}=await sb.from('salaires').upsert({
       professeur_id:p.id,
@@ -1401,7 +1401,7 @@ async function calcSalaires(mois){
       montant_total:montant,
       statut:'calcule'
     },{onConflict:'professeur_id,mois'});
-    if(\!error)ok++;
+    if(!error)ok++;
   }
   toast(`${ok} salaire(s) calculé(s)✓`,'success');
   renderSalaires();
@@ -1428,7 +1428,7 @@ async function voirDetailSal(profId,mois){
 }
 function dlSalCSV(mois){
   const {profs,profMap,salMois}=window._salData||{};
-  if(\!profs)return;
+  if(!profs)return;
   const rows=[['Professeur','Séances','Heures','Taux','Montant','Statut','Date paiement']];
   const salByProf={};(salMois||[]).forEach(s=>{salByProf[s.professeur_id]=s;});
   profs.forEach(p=>{
@@ -1488,7 +1488,7 @@ function openClM(cl){
   openModal(`<div class="modal-title">${cl?'Modifier':'Nouvelle'} classe</div>
   <input type="hidden" id="cl-id" value="${cl?.id||''}"/>
   <div class="form-row"><div class="form-group"><label>Niveau</label><input id="cl-nv" placeholder="Ex: 3ème, Terminale…" value="${cl?.niveau||''}"/></div><div class="form-group"><label>Classe (optionnel)</label><input id="cl-cl" placeholder="Ex: A, B…" value="${cl?.classe||''}"/></div></div>
-  <div class="form-row"><div class="form-group"><label>Capacité max</label><input id="cl-cap" type="number" value="${cl?.capacite_max||''}"/></div><div class="form-group"><label>Statut</label><select id="cl-ac"><option value="true" ${cl?.actif\!==false?'selected':''}>Actif</option><option value="false" ${cl?.actif===false?'selected':''}>Inactif</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label>Capacité max</label><input id="cl-cap" type="number" value="${cl?.capacite_max||''}"/></div><div class="form-group"><label>Statut</label><select id="cl-ac"><option value="true" ${cl?.actif!==false?'selected':''}>Actif</option><option value="false" ${cl?.actif===false?'selected':''}>Inactif</option></select></div></div>
   <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveCl()">💾</button></div>`);
 }
 async function saveCl(){
@@ -1519,7 +1519,7 @@ function openMaM(m){
   openModal(`<div class="modal-title">${m?'Modifier':'Nouvelle'} matière</div>
   <input type="hidden" id="ma-id" value="${m?.id||''}"/>
   <div class="form-row"><div class="form-group"><label>Nom</label><input id="ma-nm" value="${m?.nom||''}"/></div><div class="form-group"><label>Code court</label><input id="ma-cd" placeholder="Ex: MATH, PHY…" value="${m?.code||''}"/></div></div>
-  <div class="form-row"><div class="form-group"><label>Couleur (hex)</label><input id="ma-col" type="color" value="${m?.couleur||'#2E75B6'}"/></div><div class="form-group"><label>Statut</label><select id="ma-ac"><option value="true" ${m?.actif\!==false?'selected':''}>Actif</option><option value="false" ${m?.actif===false?'selected':''}>Inactif</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label>Couleur (hex)</label><input id="ma-col" type="color" value="${m?.couleur||'#2E75B6'}"/></div><div class="form-group"><label>Statut</label><select id="ma-ac"><option value="true" ${m?.actif!==false?'selected':''}>Actif</option><option value="false" ${m?.actif===false?'selected':''}>Inactif</option></select></div></div>
   <div class="form-group"><label>Description</label><textarea id="ma-desc" rows="2">${m?.description||''}</textarea></div>
   <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveMa()">💾</button></div>`);
 }
@@ -1553,7 +1553,7 @@ function openSaM(s){
   <input type="hidden" id="sa-id" value="${s?.id||''}"/>
   <div class="form-row"><div class="form-group"><label>Nom</label><input id="sa-nm" value="${s?.nom||''}"/></div><div class="form-group"><label>Siège</label><select id="sa-sg"><option value="">—</option>${sgO}</select></div></div>
   <div class="form-row"><div class="form-group"><label>Type</label><select id="sa-ty"><option value="salle_classe" ${s?.type_salle==='salle_classe'?'selected':''}>Salle de classe</option><option value="amphi" ${s?.type_salle==='amphi'?'selected':''}>Amphithéâtre</option><option value="labo" ${s?.type_salle==='labo'?'selected':''}>Laboratoire</option><option value="virtuel" ${s?.type_salle==='virtuel'?'selected':''}>Virtuel/En ligne</option></select></div><div class="form-group"><label>Capacité</label><input id="sa-cap" type="number" value="${s?.capacite||''}"/></div></div>
-  <div class="form-group"><label>Statut</label><select id="sa-ac"><option value="true" ${s?.actif\!==false?'selected':''}>Actif</option><option value="false" ${s?.actif===false?'selected':''}>Inactif</option></select></div>
+  <div class="form-group"><label>Statut</label><select id="sa-ac"><option value="true" ${s?.actif!==false?'selected':''}>Actif</option><option value="false" ${s?.actif===false?'selected':''}>Inactif</option></select></div>
   <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveSa()">💾</button></div>`);
 }
 async function saveSa(){
@@ -1584,7 +1584,7 @@ function openSgM(s){
   <input type="hidden" id="sg-id" value="${s?.id||''}"/>
   <div class="form-row"><div class="form-group"><label>Nom</label><input id="sg-nm" value="${s?.nom||''}"/></div><div class="form-group"><label>Téléphone</label><input id="sg-tel" value="${s?.telephone||''}"/></div></div>
   <div class="form-group"><label>Adresse</label><input id="sg-adr" value="${s?.adresse||''}"/></div>
-  <div class="form-row"><div class="form-group"><label>Responsable</label><input id="sg-res" value="${s?.responsable||''}"/></div><div class="form-group"><label>Statut</label><select id="sg-ac"><option value="true" ${s?.actif\!==false?'selected':''}>Actif</option><option value="false" ${s?.actif===false?'selected':''}>Inactif</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label>Responsable</label><input id="sg-res" value="${s?.responsable||''}"/></div><div class="form-group"><label>Statut</label><select id="sg-ac"><option value="true" ${s?.actif!==false?'selected':''}>Actif</option><option value="false" ${s?.actif===false?'selected':''}>Inactif</option></select></div></div>
   <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveSg()">💾</button></div>`);
 }
 async function saveSg(){
@@ -1595,7 +1595,7 @@ async function saveSg(){
 }
 // ── Generic delete ──
 async function delRef(table,id,reloadFn){
-  if(\!confirm('Supprimer cet élément ? Cette action est irréversible.'))return;
+  if(!confirm('Supprimer cet élément ? Cette action est irréversible.'))return;
   const {error}=await sb.from(table).delete().eq('id',id);
   if(error)toast(error.message,'error');else{toast('Supprimé','success');if(window[reloadFn])window[reloadFn]();}
 }
