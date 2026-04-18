@@ -81,6 +81,7 @@ tr:hover td{background:#FAFBFD;}
 .alert-info{background:#D6EAF8;color:#1A5276;border-left:4px solid var(--secondary);}
 .alert-warning{background:#FDEBD0;color:#784212;border-left:4px solid var(--warning);}
 .alert-danger{background:#FADBD8;color:#78281F;border-left:4px solid var(--danger);}
+.alert-success{background:#D5F5E3;color:#1E8449;border-left:4px solid var(--success);}
 .pipeline{display:flex;gap:3px;flex-wrap:wrap;}
 .pipeline-step{padding:3px 8px;border-radius:10px;font-size:10px;font-weight:600;background:#EEF2F7;color:var(--muted);}
 .pipeline-step.active{background:var(--secondary);color:#fff;}.pipeline-step.done{background:var(--success);color:#fff;}
@@ -535,58 +536,104 @@ async function renderPlanification(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
   const [sR,pR,mR,salR,clR,sgR]=await Promise.all([
-    sb.from('sessions').select('*,professeurs(prenom,nom),matieres(nom,code),salles(nom),sieges(nom)').order('date_session').order('heure_debut'),
+    sb.from('sessions').select('*,professeurs(prenom,nom),matieres(nom,code),salles(nom),niveaux_classes(niveau,classe),sieges(nom)').order('date_session').order('heure_debut'),
     sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
     sb.from('matieres').select('id,nom,code').eq('actif',true),
     sb.from('salles').select('id,nom,siege_id').eq('actif',true),
-    sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true),
+    sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau'),
     sb.from('sieges').select('id,nom').eq('actif',true)
   ]);
   PD={sessions:sR.data||[],profs:pR.data||[],matieres:mR.data||[],salles:salR.data||[],classes:clR.data||[],sieges:sgR.data||[]};
-  renderPlanifList('','');
+  renderPlanifList('','','','');
 }
-function renderPlanifList(fm,fp){
+function renderPlanifList(fm,fp,fc,fst){
   const c=document.getElementById('content');
   let ses=PD.sessions;
   if(fm)ses=ses.filter(s=>s.date_session?.startsWith(fm));
   if(fp)ses=ses.filter(s=>s.professeur_id===fp);
+  if(fc)ses=ses.filter(s=>s.classe_id===fc);
+  if(fst)ses=ses.filter(s=>s.statut===fst);
   const mOpts=[...new Set(PD.sessions.map(s=>s.date_session?.slice(0,7)))].sort().reverse().map(m=>`<option value="${m}">${m}</option>`).join('');
   const pOpts=PD.profs.map(p=>`<option value="${p.id}">${p.nom} ${p.prenom}</option>`).join('');
+  const clOpts=PD.classes.map(cl=>`<option value="${cl.id}">${cl.niveau} ${cl.classe||''}</option>`).join('');
   c.innerHTML=`
   <div class="filter-bar">
     <button class="btn btn-primary" onclick="openSesModal()">+ Nouvelle séance</button>
+    <input id="fs" type="text" placeholder="🔍 Rechercher…" oninput="filterP()" style="padding:7px 10px;border:1.5px solid #DDE3EA;border-radius:6px;font-size:13px;min-width:180px"/>
     <select id="fm" onchange="filterP()"><option value="">Tous mois</option>${mOpts}</select>
     <select id="fp" onchange="filterP()" style="min-width:160px"><option value="">Tous profs</option>${pOpts}</select>
+    <select id="fc" onchange="filterP()" style="min-width:140px"><option value="">Toutes classes</option>${clOpts}</select>
+    <select id="fst" onchange="filterP()"><option value="">Tous statuts</option><option value="planifiee">Planifiée</option><option value="realisee">Réalisée</option><option value="annulee">Annulée</option><option value="reportee">Reportée</option></select>
     <button class="btn btn-outline btn-sm" onclick="dlCSV()">⬇ CSV</button>
   </div>
   <div class="panel">
     <div class="panel-header"><span class="panel-title">📅 Séances (${ses.length})</span></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Date</th><th>Horaire</th><th>Professeur</th><th>Matière</th><th>Salle</th><th>Élèves</th><th>Lien live</th><th>Statut</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Date</th><th>Horaire</th><th>Professeur</th><th>Matière(s)</th><th>Classe</th><th>Salle</th><th>Élèves</th><th>Statut</th><th>Actions</th></tr></thead>
       <tbody>${ses.length?ses.map(s=>`
         <tr>
           <td><strong>${fmtDate(s.date_session)}</strong></td>
           <td>${fmtHour(s.heure_debut)}–${fmtHour(s.heure_fin)}</td>
           <td>${s.professeurs?s.professeurs.nom+' '+s.professeurs.prenom:'—'}</td>
-          <td>${s.matieres?`<span class="badge badge-blue">${s.matieres.code}</span>`:'—'} ${s.matieres?.nom||''}</td>
+          <td>${s.matieres?`<span class="badge badge-blue">${s.matieres.code}</span> ${s.matieres.nom}`:'—'}</td>
+          <td>${s.niveaux_classes?s.niveaux_classes.niveau+' '+(s.niveaux_classes.classe||''):'—'}</td>
           <td>${s.salles?.nom||'—'}</td>
           <td>${s.nb_eleves_prevus||'—'}</td>
-          <td>${s.lien_live?`<a href="${s.lien_live}" target="_blank" style="color:var(--secondary)">🔗</a>`:'—'}</td>
           <td>${badge(s.statut)}</td>
-          <td>
-            <button class="btn btn-outline btn-sm" onclick="editSes('${s.id}')">✏️</button>
-            <button class="btn btn-sm" style="background:var(--success);color:#fff" onclick="setStatut('${s.id}','realisee')">✔</button>
-            <button class="btn btn-danger btn-sm" onclick="setStatut('${s.id}','annulee')">✕</button>
+          <td style="white-space:nowrap">
+            <button class="btn btn-outline btn-sm" title="Modifier" onclick="editSes('${s.id}')">✏️</button>
+            <button class="btn btn-sm" style="background:var(--success);color:#fff" title="Réalisée" onclick="setStatut('${s.id}','realisee')">✔</button>
+            <button class="btn btn-danger btn-sm" title="Annuler" onclick="setStatut('${s.id}','annulee')">✕</button>
+            <button class="btn btn-sm" style="background:#8e44ad;color:#fff" title="Reporter" onclick="setStatut('${s.id}','reportee')">⏩</button>
+            <button class="btn btn-sm" style="background:#636e72;color:#fff" title="Supprimer" onclick="delSes('${s.id}')">🗑</button>
           </td>
         </tr>`).join(''):`<tr><td colspan="9"><div class="empty"><div class="icon">📅</div>Aucune séance</div></td></tr>`}
       </tbody>
     </table></div>
   </div>`;
 }
-function filterP(){renderPlanifList(document.getElementById('fm')?.value||'',document.getElementById('fp')?.value||'');}
+function filterP(){
+  const fs=(document.getElementById('fs')?.value||'').toLowerCase();
+  const fm=document.getElementById('fm')?.value||'';
+  const fp=document.getElementById('fp')?.value||'';
+  const fc=document.getElementById('fc')?.value||'';
+  const fst=document.getElementById('fst')?.value||'';
+  let ses=PD.sessions;
+  if(fm)ses=ses.filter(s=>s.date_session?.startsWith(fm));
+  if(fp)ses=ses.filter(s=>s.professeur_id===fp);
+  if(fc)ses=ses.filter(s=>s.classe_id===fc);
+  if(fst)ses=ses.filter(s=>s.statut===fst);
+  if(fs)ses=ses.filter(s=>(s.professeurs?.nom+' '+s.professeurs?.prenom+' '+s.matieres?.nom+' '+s.date_session).toLowerCase().includes(fs));
+  const mOpts=[...new Set(PD.sessions.map(s=>s.date_session?.slice(0,7)))].sort().reverse().map(m=>`<option value="${m}">${m}</option>`).join('');
+  const pOpts=PD.profs.map(p=>`<option value="${p.id}">${p.nom} ${p.prenom}</option>`).join('');
+  const clOpts=PD.classes.map(cl=>`<option value="${cl.id}">${cl.niveau} ${cl.classe||''}</option>`).join('');
+  const c=document.getElementById('content');
+  if(\!c)return;
+  // Re-render just the table inside existing panel
+  const tbody=c.querySelector('tbody');
+  if(\!tbody)return renderPlanifList(fm,fp,fc,fst);
+  tbody.innerHTML=ses.length?ses.map(s=>`
+    <tr>
+      <td><strong>${fmtDate(s.date_session)}</strong></td>
+      <td>${fmtHour(s.heure_debut)}–${fmtHour(s.heure_fin)}</td>
+      <td>${s.professeurs?s.professeurs.nom+' '+s.professeurs.prenom:'—'}</td>
+      <td>${s.matieres?`<span class="badge badge-blue">${s.matieres.code}</span> ${s.matieres.nom}`:'—'}</td>
+      <td>${s.niveaux_classes?s.niveaux_classes.niveau+' '+(s.niveaux_classes.classe||''):'—'}</td>
+      <td>${s.salles?.nom||'—'}</td>
+      <td>${s.nb_eleves_prevus||'—'}</td>
+      <td>${badge(s.statut)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="editSes('${s.id}')">✏️</button>
+        <button class="btn btn-sm" style="background:var(--success);color:#fff" onclick="setStatut('${s.id}','realisee')">✔</button>
+        <button class="btn btn-danger btn-sm" onclick="setStatut('${s.id}','annulee')">✕</button>
+        <button class="btn btn-sm" style="background:#8e44ad;color:#fff" onclick="setStatut('${s.id}','reportee')">⏩</button>
+        <button class="btn btn-sm" style="background:#636e72;color:#fff" onclick="delSes('${s.id}')">🗑</button>
+      </td>
+    </tr>`).join(''):`<tr><td colspan="9"><div class="empty"><div class="icon">📅</div>Aucune séance</div></td></tr>`;
+}
 function dlCSV(){
-  const rows=[['Date','HeureDeb','HeureFin','Professeur','Matière','Salle','NbPrévus','Statut']];
-  PD.sessions.forEach(s=>rows.push([s.date_session,s.heure_debut?.slice(0,5),s.heure_fin?.slice(0,5),(s.professeurs?.nom||'')+' '+(s.professeurs?.prenom||''),s.matieres?.nom||'',s.salles?.nom||'',s.nb_eleves_prevus||0,s.statut]));
+  const rows=[['Date','HeureDeb','HeureFin','Professeur','Matière','Classe','Salle','NbPrévus','Statut']];
+  PD.sessions.forEach(s=>rows.push([s.date_session,s.heure_debut?.slice(0,5),s.heure_fin?.slice(0,5),(s.professeurs?.nom||'')+' '+(s.professeurs?.prenom||''),s.matieres?.nom||'',s.niveaux_classes?s.niveaux_classes.niveau+' '+(s.niveaux_classes.classe||''):'',s.salles?.nom||'',s.nb_eleves_prevus||0,s.statut]));
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.map(r=>r.join(',')).join('\n'));a.download='planning.csv';a.click();
 }
 function openSesModal(s=null){
@@ -594,6 +641,7 @@ function openSesModal(s=null){
   const mO=PD.matieres.map(m=>`<option value="${m.id}" ${s?.matiere_id===m.id?'selected':''}>${m.nom}</option>`).join('');
   const salO=PD.salles.map(sl=>`<option value="${sl.id}" ${s?.salle_id===sl.id?'selected':''}>${sl.nom}</option>`).join('');
   const sgO=PD.sieges.map(sg=>`<option value="${sg.id}" ${s?.siege_id===sg.id?'selected':''}>${sg.nom}</option>`).join('');
+  const clO=PD.classes.map(cl=>`<option value="${cl.id}" ${s?.classe_id===cl.id?'selected':''}>${cl.niveau} ${cl.classe||''}</option>`).join('');
   openModal(`
   <div class="modal-title">${s?.id?'Modifier':'Nouvelle'} séance</div>
   <input type="hidden" id="s-id" value="${s?.id||''}"/>
@@ -610,7 +658,10 @@ function openSesModal(s=null){
     <div class="form-group"><label>Heure fin</label><input id="s-hf" type="time" value="${s?.heure_fin?.slice(0,5)||'10:00'}"/></div>
   </div>
   <div class="form-group"><label>Professeur</label><select id="s-pr"><option value="">— Choisir —</option>${pO}</select></div>
-  <div class="form-group"><label>Matière</label><select id="s-ma"><option value="">— Choisir —</option>${mO}</select></div>
+  <div class="form-row">
+    <div class="form-group"><label>Matière</label><select id="s-ma"><option value="">— Choisir —</option>${mO}</select></div>
+    <div class="form-group"><label>Classe / Niveau</label><select id="s-cl"><option value="">— Choisir —</option>${clO}</select></div>
+  </div>
   <div class="form-row">
     <div class="form-group"><label>Siège</label><select id="s-sg"><option value="">— Choisir —</option>${sgO}</select></div>
     <div class="form-group"><label>Salle</label><select id="s-sa"><option value="">— Choisir —</option>${salO}</select></div>
@@ -631,141 +682,219 @@ async function saveSes(){
   const dt=document.getElementById('s-dt').value;
   const payload={date_session:dt,heure_debut:document.getElementById('s-hd').value,heure_fin:document.getElementById('s-hf').value,
     professeur_id:document.getElementById('s-pr').value||null,matiere_id:document.getElementById('s-ma').value||null,
+    classe_id:document.getElementById('s-cl').value||null,
     siege_id:document.getElementById('s-sg').value||null,salle_id:document.getElementById('s-sa').value||null,
     nb_eleves_prevus:parseInt(document.getElementById('s-nb').value)||0,lien_live:document.getElementById('s-ll').value||null,
     notes_tech:document.getElementById('s-nt').value||null,type_session:document.getElementById('s-ty').value,
     planifie_par:currentUser?.id||null,mois_planning:dt?dt.slice(0,8)+'01':null};
   if(id){const mot=document.getElementById('s-mot')?.value;if(mot)payload.motif_modification=mot;}
-  const {error}=id?await sb.from('sessions').update(payload).eq('id',id):await sb.from('sessions').insert(payload);
-  if(error)toast(error.message,'error');else{toast(id?'Séance modifiée':'Séance créée','success');closeModal();renderPlanification();}
+  const {data,error}=id
+    ?await sb.from('sessions').update(payload).eq('id',id).select().single()
+    :await sb.from('sessions').insert(payload).select().single();
+  if(error){toast(error.message,'error');return;}
+  // Auto-create series_document entry for each new session
+  if(\!id && data?.id){
+    await sb.from('series_documents').insert({
+      session_id:data.id,
+      professeur_id:payload.professeur_id,
+      statut:'non_envoye',
+      notes:'Créé automatiquement depuis la planification'
+    }).select();
+  }
+  toast(id?'Séance modifiée':'Séance créée','success');
+  closeModal();renderPlanification();
 }
 async function editSes(id){const {data}=await sb.from('sessions').select('*').eq('id',id).single();if(data)openSesModal(data);}
 async function setStatut(id,statut){
   let extra={};
-  if(statut==='realisee'){const n=prompt('Nb élèves présents ?','0');if(n!==null)extra.nb_eleves_presents=parseInt(n)||0;}
+  if(statut==='realisee'){const n=prompt('Nb élèves présents ?','0');if(n===null)return;extra.nb_eleves_presents=parseInt(n)||0;}
   const {error}=await sb.from('sessions').update({statut,...extra}).eq('id',id);
   if(error)toast(error.message,'error');else{toast('Statut : '+statut,'success');renderPlanification();}
 }
+async function delSes(id){
+  if(\!confirm('Supprimer cette séance ? (les documents liés seront aussi supprimés)'))return;
+  await sb.from('series_documents').delete().eq('session_id',id);
+  const {error}=await sb.from('sessions').delete().eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Séance supprimée','success');renderPlanification();}
+}
+
 </script>
 <script>
-// ── SAISIE ─────────────────────────────────────────────────────────────
 async function renderSaisie(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  const [dR,sR,sesR,pR]=await Promise.all([
-    sb.from('series_documents').select('*,sessions(date_session,heure_debut,matieres(nom)),professeurs(prenom,nom)').order('created_at',{ascending:false}),
-    sb.from('saisies').select('*,sessions(date_session,matieres(nom)),user_profiles(prenom,nom)').order('created_at',{ascending:false}).limit(60),
-    sb.from('sessions').select('id,date_session,heure_debut,matieres(nom),professeurs(nom,prenom)').order('date_session',{ascending:false}).limit(100),
-    sb.from('professeurs').select('id,prenom,nom').eq('actif',true)
+  const [dR,pR,clR]=await Promise.all([
+    sb.from('series_documents').select('*,sessions(id,date_session,heure_debut,heure_fin,matieres(nom,code),niveaux_classes(niveau,classe),statut),professeurs(prenom,nom)').order('created_at',{ascending:false}),
+    sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
+    sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau')
   ]);
-  const docs=dR.data||[],saisies=sR.data||[];
-  const sesO=(sesR.data||[]).map(s=>`<option value="${s.id}">${fmtDate(s.date_session)} ${s.heure_debut?.slice(0,5)} — ${s.matieres?.nom||''} — ${s.professeurs?.nom||''}</option>`).join('');
-  const pO=(pR.data||[]).map(p=>`<option value="${p.id}">${p.nom} ${p.prenom}</option>`).join('');
+  window._SD={docs:dR.data||[],profs:pR.data||[],classes:clR.data||[]};
+  renderSaisieList('','','');
+}
+function renderSaisieList(fm,fp,fst){
+  const c=document.getElementById('content');
+  let docs=window._SD.docs;
+  if(fm)docs=docs.filter(d=>d.sessions?.date_session?.startsWith(fm));
+  if(fp)docs=docs.filter(d=>d.professeur_id===fp||d.sessions?.professeur_id===fp);
+  if(fst)docs=docs.filter(d=>d.statut===fst);
+  const total=window._SD.docs.length;
+  const byStatut=s=>window._SD.docs.filter(d=>d.statut===s).length;
   const DOC_S=['non_envoye','en_attente','en_cours','en_verification','valide','publie'];
   function pipe(cur){return`<div class="pipeline">${DOC_S.map(s=>`<span class="pipeline-step ${s===cur?'active':DOC_S.indexOf(s)<DOC_S.indexOf(cur)?'done':''}">${s.replace(/_/g,' ')}</span>`).join('')}</div>`;}
+  const mOpts=[...new Set(window._SD.docs.map(d=>d.sessions?.date_session?.slice(0,7)).filter(Boolean))].sort().reverse().map(m=>`<option value="${m}">${m}</option>`).join('');
+  const pOpts=window._SD.profs.map(p=>`<option value="${p.id}">${p.nom} ${p.prenom}</option>`).join('');
   c.innerHTML=`
   <div class="kpi-grid">
-    <div class="kpi-card orange"><div class="label">Backlog saisies</div><div class="value">${saisies.filter(s=>s.statut==='non_commencee').length}</div></div>
-    <div class="kpi-card blue"><div class="label">En cours</div><div class="value">${saisies.filter(s=>s.statut==='en_cours').length}</div></div>
-    <div class="kpi-card green"><div class="label">Validées</div><div class="value">${saisies.filter(s=>s.statut==='validee').length}</div></div>
-    <div class="kpi-card"><div class="label">Documents reçus</div><div class="value">${docs.length}</div></div>
+    <div class="kpi-card orange"><div class="label">Non envoyés</div><div class="value">${byStatut('non_envoye')}</div></div>
+    <div class="kpi-card"><div class="label">En attente</div><div class="value">${byStatut('en_attente')}</div></div>
+    <div class="kpi-card orange"><div class="label">En cours saisie</div><div class="value">${byStatut('en_cours')}</div></div>
+    <div class="kpi-card blue"><div class="label">En vérification</div><div class="value">${byStatut('en_verification')}</div></div>
+    <div class="kpi-card green"><div class="label">Validés</div><div class="value">${byStatut('valide')}</div></div>
+    <div class="kpi-card green"><div class="label">Publiés</div><div class="value">${byStatut('publie')}</div></div>
   </div>
-  <div class="tabs">
-    <div class="tab active" onclick="stab('docs',this)">📂 Documents professeurs</div>
-    <div class="tab" onclick="stab('saisies',this)">✏️ Mes saisies</div>
+  <div class="filter-bar">
+    <button class="btn btn-primary" onclick="openDocManual()">+ Enregistrer document reçu</button>
+    <select id="sfm" onchange="sfilt()"><option value="">Tous mois</option>${mOpts}</select>
+    <select id="sfp" onchange="sfilt()" style="min-width:160px"><option value="">Tous profs</option>${pOpts}</select>
+    <select id="sfst" onchange="sfilt()">
+      <option value="">Tous statuts</option>
+      <option value="non_envoye">Non envoyé</option>
+      <option value="en_attente">En attente</option>
+      <option value="en_cours">En cours</option>
+      <option value="en_verification">En vérification</option>
+      <option value="valide">Validé</option>
+      <option value="publie">Publié</option>
+    </select>
+    <button class="btn btn-outline btn-sm" onclick="dlSaisieCSV()">⬇ CSV</button>
   </div>
-  <div id="st-docs">
-    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openDocM()">+ Enregistrer document reçu</button></div>
-    <div class="panel"><div class="tbl-wrap"><table>
-      <thead><tr><th>Session</th><th>Prof</th><th>Format</th><th>Reçu le</th><th>Pipeline statut</th><th>Qualité</th><th>Action</th></tr></thead>
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">📂 Documents — Séances (${docs.length})</span>
+      <small style="color:var(--muted)">Chaque séance = 1 document à saisir</small>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Session</th><th>Matière</th><th>Classe</th><th>Professeur</th><th>Format</th><th>Reçu le</th><th>Qualité</th><th>Pipeline statut</th><th>Actions</th></tr></thead>
       <tbody>${docs.length?docs.map(d=>`<tr>
-        <td>${d.sessions?fmtDate(d.sessions.date_session)+' '+fmtHour(d.sessions.heure_debut):'—'}<br><small>${d.sessions?.matieres?.nom||''}</small></td>
+        <td><strong>${fmtDate(d.sessions?.date_session)}</strong><br><small>${fmtHour(d.sessions?.heure_debut)}–${fmtHour(d.sessions?.heure_fin)}</small></td>
+        <td>${d.sessions?.matieres?`<span class="badge badge-blue">${d.sessions.matieres.code}</span>`:'—'}</td>
+        <td>${d.sessions?.niveaux_classes?d.sessions.niveaux_classes.niveau+' '+(d.sessions.niveaux_classes.classe||''):'—'}</td>
         <td>${d.professeurs?d.professeurs.nom+' '+d.professeurs.prenom:'—'}</td>
-        <td><span class="badge badge-blue">${d.format_document||'—'}</span></td>
-        <td>${fmtDT(d.date_reception)}</td>
-        <td>${pipe(d.statut)}</td>
+        <td>${d.format_document?`<span class="badge badge-grey">${d.format_document}</span>`:'—'}</td>
+        <td>${d.date_reception?fmtDT(d.date_reception):'<span style="color:var(--muted)">Non reçu</span>'}</td>
         <td>${d.qualite_doc?'⭐'.repeat(d.qualite_doc):'—'}</td>
-        <td><button class="btn btn-outline btn-sm" onclick="advDoc('${d.id}','${d.statut}')">Avancer →</button></td>
-      </tr>`).join(''):`<tr><td colspan="7"><div class="empty"><div class="icon">📂</div>Aucun document</div></td></tr>`}
-      </tbody>
-    </table></div></div>
-  </div>
-  <div id="st-saisies" style="display:none">
-    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openNewSaisie('${sesO.replace(/'/g,"\\'")}')">+ Créer saisie</button></div>
-    <div class="panel"><div class="tbl-wrap"><table>
-      <thead><tr><th>Session</th><th>Agent</th><th>Début</th><th>Fin</th><th>Statut</th><th>Score QC</th><th>Commentaire</th><th>Actions</th></tr></thead>
-      <tbody>${saisies.length?saisies.map(s=>`<tr>
-        <td>${fmtDate(s.sessions?.date_session)}<br><small>${s.sessions?.matieres?.nom||''}</small></td>
-        <td>${s.user_profiles?s.user_profiles.prenom+' '+s.user_profiles.nom:'—'}</td>
-        <td>${fmtDT(s.date_debut)}</td><td>${fmtDT(s.date_fin)}</td>
-        <td>${badge(s.statut)}</td>
-        <td>${s.score_qualite!=null?s.score_qualite+'/10':'—'}</td>
-        <td style="max-width:150px;font-size:12px;color:var(--muted)">${s.commentaire_qc||'—'}</td>
-        <td>
-          ${s.statut==='non_commencee'?`<button class="btn btn-outline btn-sm" onclick="startS('${s.id}')">▶</button>`:''}
-          ${s.statut==='en_cours'?`<button class="btn btn-success btn-sm" onclick="finishS('${s.id}')">✔</button>`:''}
+        <td>${pipe(d.statut)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-outline btn-sm" title="Modifier" onclick="openDocEdit('${d.id}')">✏️</button>
+          ${d.statut\!=='publie'?`<button class="btn btn-primary btn-sm" title="Avancer statut" onclick="advDoc('${d.id}','${d.statut}')">→</button>`:''}
+          ${d.statut\!=='non_envoye'?`<button class="btn btn-sm" style="background:#e17055;color:#fff" title="Reculer statut" onclick="backDoc('${d.id}','${d.statut}')">←</button>`:''}
+          <button class="btn btn-sm" style="background:#636e72;color:#fff" title="Supprimer" onclick="delDoc('${d.id}')">🗑</button>
         </td>
-      </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><div class="icon">✏️</div>Aucune saisie</div></td></tr>`}
+      </tr>`).join(''):`<tr><td colspan="9"><div class="empty"><div class="icon">📂</div>Aucun document enregistré</div></td></tr>`}
       </tbody>
-    </table></div></div>
+    </table></div>
   </div>`;
-  // Store sesO and pO for modals
-  window._sesO=sesO; window._pO=pO;
+  window._pOpts=pOpts;
 }
-function stab(t,el){
-  document.querySelectorAll('.tabs .tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');
-  document.getElementById('st-docs').style.display=t==='docs'?'block':'none';
-  document.getElementById('st-saisies').style.display=t==='saisies'?'block':'none';
+function sfilt(){renderSaisieList(document.getElementById('sfm')?.value||'',document.getElementById('sfp')?.value||'',document.getElementById('sfst')?.value||'');}
+function dlSaisieCSV(){
+  const rows=[['Date session','Matière','Classe','Professeur','Format','Date réception','Qualité','Statut']];
+  (window._SD.docs||[]).forEach(d=>rows.push([d.sessions?.date_session,d.sessions?.matieres?.nom,d.sessions?.niveaux_classes?.niveau,d.professeurs?.nom,'',d.date_reception||'',d.qualite_doc||'',d.statut]));
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.map(r=>r.join(',')).join('\n'));a.download='saisie.csv';a.click();
 }
 const DS=['non_envoye','en_attente','en_cours','en_verification','valide','publie'];
+const DS_DATES={en_attente:'date_reception',en_cours:'date_debut_saisie',en_verification:'date_fin_saisie',valide:'date_validation',publie:'date_publication'};
 async function advDoc(id,cur){
   const idx=DS.indexOf(cur);
-  if(idx<DS.length-1){
-    const {error}=await sb.from('series_documents').update({statut:DS[idx+1]}).eq('id',id);
-    if(error)toast(error.message,'error');else{toast('Document → '+DS[idx+1],'success');renderSaisie();}
-  }else toast('Document déjà publié','');
+  if(idx>=DS.length-1){toast('Document déjà publié','');return;}
+  const nextSt=DS[idx+1];
+  const upd={statut:nextSt};
+  // Auto-capture date
+  const dateField=DS_DATES[nextSt];
+  if(dateField)upd[dateField]=new Date().toISOString();
+  if(nextSt==='en_attente'){
+    const fmt=prompt('Format du document reçu :\n(PDF / PPT / scan / image / ancien_doc / autre)','PDF');
+    if(\!fmt)return;
+    upd.format_document=fmt;
+    upd.date_reception=new Date().toISOString();
+    const q=prompt('Qualité du document (1-5) :','4');
+    if(q)upd.qualite_doc=parseInt(q)||null;
+  }
+  const {error}=await sb.from('series_documents').update(upd).eq('id',id);
+  if(error)toast(error.message,'error');else{toast('→ '+nextSt.replace(/_/g,' '),'success');renderSaisie();}
 }
-function openDocM(){
-  openModal(`
-  <div class="modal-title">📂 Document reçu du professeur</div>
-  <div class="form-group"><label>Session</label><select id="d-s"><option value="">— Choisir —</option>${window._sesO||''}</select></div>
-  <div class="form-group"><label>Professeur</label><select id="d-p"><option value="">— Choisir —</option>${window._pO||''}</select></div>
-  <div class="form-row">
-    <div class="form-group"><label>Format</label><select id="d-f"><option value="PDF">PDF</option><option value="PPT">PPT</option><option value="scan">Scan</option><option value="image">Image</option><option value="ancien_doc">Ancien doc</option><option value="autre">Autre</option></select></div>
-    <div class="form-group"><label>Qualité (1-5)</label><select id="d-q"><option value="">—</option>${[1,2,3,4,5].map(n=>`<option value="${n}">${'⭐'.repeat(n)}</option>`).join('')}</select></div>
-  </div>
-  <div class="form-group"><label>Date réception</label><input id="d-dt" type="datetime-local" value="${new Date().toISOString().slice(0,16)}"/></div>
-  <div class="form-group"><label>Lien fichier</label><input id="d-u" placeholder="https://…"/></div>
-  <div class="form-group"><label>Notes</label><textarea id="d-n" rows="2"></textarea></div>
-  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveDoc()">💾 Enregistrer</button></div>`);
+async function backDoc(id,cur){
+  const idx=DS.indexOf(cur);
+  if(idx<=0){toast('Déjà au début','');return;}
+  const {error}=await sb.from('series_documents').update({statut:DS[idx-1]}).eq('id',id);
+  if(error)toast(error.message,'error');else{toast('← '+DS[idx-1].replace(/_/g,' '),'success');renderSaisie();}
 }
-async function saveDoc(){
-  const {error}=await sb.from('series_documents').insert({session_id:document.getElementById('d-s').value||null,professeur_id:document.getElementById('d-p').value||null,format_document:document.getElementById('d-f').value,qualite_doc:document.getElementById('d-q').value||null,date_reception:document.getElementById('d-dt').value,url_fichier:document.getElementById('d-u').value||null,notes:document.getElementById('d-n').value||null,statut:'en_attente'});
+async function delDoc(id){
+  if(\!confirm('Supprimer ce document ?'))return;
+  const {error}=await sb.from('series_documents').delete().eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Supprimé','success');renderSaisie();}
+}
+function openDocManual(){
+  // Fetch sessions not yet having a doc
+  sb.from('sessions').select('id,date_session,heure_debut,matieres(nom),professeurs(nom,prenom)').order('date_session',{ascending:false}).limit(200)
+  .then(({data})=>{
+    const sesO=(data||[]).map(s=>`<option value="${s.id}">${fmtDate(s.date_session)} ${s.heure_debut?.slice(0,5)} — ${s.matieres?.nom||''} — ${s.professeurs?.nom||''}</option>`).join('');
+    openModal(`
+    <div class="modal-title">📂 Enregistrer document reçu</div>
+    <div class="form-group"><label>Session</label><select id="d-s"><option value="">— Choisir —</option>${sesO}</select></div>
+    <div class="form-group"><label>Professeur (si différent)</label><select id="d-p"><option value="">— Auto —</option>${window._pOpts||''}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label>Format</label><select id="d-f"><option value="PDF">PDF</option><option value="PPT">PPT</option><option value="scan">Scan</option><option value="image">Image</option><option value="ancien_doc">Ancien doc</option><option value="autre">Autre</option></select></div>
+      <div class="form-group"><label>Qualité (1-5)</label><select id="d-q"><option value="">—</option>${[1,2,3,4,5].map(n=>`<option value="${n}">${'⭐'.repeat(n)}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label>Date réception</label><input id="d-dt" type="datetime-local" value="${new Date().toISOString().slice(0,16)}"/></div>
+    <div class="form-group"><label>Lien fichier</label><input id="d-u" placeholder="https://…"/></div>
+    <div class="form-group"><label>Notes</label><textarea id="d-n" rows="2"></textarea></div>
+    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveDocManual()">💾 Enregistrer</button></div>`);
+  });
+}
+async function saveDocManual(){
+  const sesId=document.getElementById('d-s').value;
+  if(\!sesId){toast('Choisir une session','error');return;}
+  // Get prof from session if not specified
+  let profId=document.getElementById('d-p').value||null;
+  if(\!profId){const {data}=await sb.from('sessions').select('professeur_id').eq('id',sesId).single();profId=data?.professeur_id||null;}
+  const {error}=await sb.from('series_documents').upsert({session_id:sesId,professeur_id:profId,format_document:document.getElementById('d-f').value,qualite_doc:document.getElementById('d-q').value||null,date_reception:document.getElementById('d-dt').value,url_fichier:document.getElementById('d-u').value||null,notes:document.getElementById('d-n').value||null,statut:'en_attente'},{onConflict:'session_id'});
   if(error)toast(error.message,'error');else{toast('Document enregistré','success');closeModal();renderSaisie();}
 }
-function openNewSaisie(sesO){
+function openDocEdit(id){
+  const doc=(window._SD.docs||[]).find(d=>d.id===id);
+  if(\!doc)return;
   openModal(`
-  <div class="modal-title">✏️ Créer une saisie</div>
-  <div class="form-group"><label>Session</label><select id="ns-s"><option value="">— Choisir —</option>${sesO}</select></div>
-  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="createSaisie()">💾 Créer</button></div>`);
+  <div class="modal-title">✏️ Modifier document</div>
+  <div class="form-row">
+    <div class="form-group"><label>Format</label><select id="de-f">
+      <option value="PDF" ${doc.format_document==='PDF'?'selected':''}>PDF</option>
+      <option value="PPT" ${doc.format_document==='PPT'?'selected':''}>PPT</option>
+      <option value="scan" ${doc.format_document==='scan'?'selected':''}>Scan</option>
+      <option value="image" ${doc.format_document==='image'?'selected':''}>Image</option>
+      <option value="ancien_doc" ${doc.format_document==='ancien_doc'?'selected':''}>Ancien doc</option>
+      <option value="autre" ${doc.format_document==='autre'?'selected':''}>Autre</option>
+    </select></div>
+    <div class="form-group"><label>Qualité (1-5)</label><select id="de-q">
+      <option value="">—</option>${[1,2,3,4,5].map(n=>`<option value="${n}" ${doc.qualite_doc==n?'selected':''}>${'⭐'.repeat(n)}</option>`).join('')}
+    </select></div>
+  </div>
+  <div class="form-group"><label>Statut</label><select id="de-st">
+    ${DS.map(s=>`<option value="${s}" ${doc.statut===s?'selected':''}>${s.replace(/_/g,' ')}</option>`).join('')}
+  </select></div>
+  <div class="form-group"><label>Date réception</label><input id="de-dt" type="datetime-local" value="${doc.date_reception?doc.date_reception.slice(0,16):''}"/></div>
+  <div class="form-group"><label>Lien fichier</label><input id="de-u" value="${doc.url_fichier||''}"/></div>
+  <div class="form-group"><label>Notes</label><textarea id="de-n" rows="2">${doc.notes||''}</textarea></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveDocEdit('${id}')">💾</button></div>`);
 }
-async function createSaisie(){
-  const sesId=document.getElementById('ns-s').value;
-  if(!sesId){toast('Choisir une session','error');return;}
-  const {error}=await sb.from('saisies').insert({session_id:sesId,agent_id:currentUser?.id,statut:'non_commencee'});
-  if(error)toast(error.message,'error');else{toast('Saisie créée','success');closeModal();renderSaisie();}
+async function saveDocEdit(id){
+  const st=document.getElementById('de-st').value;
+  const upd={format_document:document.getElementById('de-f').value,qualite_doc:document.getElementById('de-q').value||null,statut:st,date_reception:document.getElementById('de-dt').value||null,url_fichier:document.getElementById('de-u').value||null,notes:document.getElementById('de-n').value||null};
+  if(st in DS_DATES && \!upd[DS_DATES[st]])upd[DS_DATES[st]]=new Date().toISOString();
+  const {error}=await sb.from('series_documents').update(upd).eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Document mis à jour','success');closeModal();renderSaisie();}
 }
-async function startS(id){
-  const {error}=await sb.from('saisies').update({statut:'en_cours',date_debut:new Date().toISOString()}).eq('id',id);
-  if(error)toast(error.message,'error');else{toast('Saisie démarrée','success');renderSaisie();}
-}
-async function finishS(id){
-  const url=prompt('URL fichier saisi (optionnel) :','');
-  const {error}=await sb.from('saisies').update({statut:'terminee',date_fin:new Date().toISOString(),url_fichier_saisi:url||null}).eq('id',id);
-  if(error)toast(error.message,'error');else{toast('Saisie soumise pour validation','success');renderSaisie();}
-}
-</script>
-<script>
+
 // ── TECHNIQUE / QC ─────────────────────────────────────────────────────
 async function renderTechnique(){
   const c=document.getElementById('content');
@@ -1044,175 +1173,433 @@ async function saveCf(preE,preA){
   if(!error&&moy&&eId)await sb.from('eleves').update({moyenne_scolaire:parseFloat(moy)}).eq('id',eId);
   if(error)toast(error.message,'error');else{toast('Contact enregistré','success');closeModal();renderFidelisation();}
 }
+
+</script>
+<script>
 // ── PROFESSEURS ────────────────────────────────────────────────────────
 async function renderProfesseurs(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  const [pR,sR]=await Promise.all([sb.from('professeurs').select('*,sieges(nom)').order('nom'),sb.from('sieges').select('id,nom').eq('actif',true)]);
-  const profs=pR.data||[],sigs=sR.data||[];
+  const [pR,sR,mR]=await Promise.all([
+    sb.from('professeurs').select('*,sieges(nom)').order('nom'),
+    sb.from('sieges').select('id,nom').eq('actif',true),
+    sb.from('matieres').select('id,nom,code').eq('actif',true)
+  ]);
+  window._PD={profs:pR.data||[],sigs:sR.data||[],matieres:mR.data||[]};
+  renderProfList('','');
+}
+function renderProfList(fs,fsig){
+  const {profs,sigs}=window._PD;
+  let list=profs;
+  if(fs)list=list.filter(p=>(p.nom+' '+p.prenom+' '+p.email).toLowerCase().includes(fs.toLowerCase()));
+  if(fsig)list=list.filter(p=>p.siege_id===fsig);
   const sO=sigs.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('');
-  c.innerHTML=`<div style="margin-bottom:16px"><button class="btn btn-primary" onclick="openPrM(null,'${sO.replace(/'/g,"\\'")}')">+ Nouveau professeur</button></div>
+  const sigFiltO=sigs.map(s=>`<option value="${s.id}">${s.nom}</option>`).join('');
+  document.getElementById('content').innerHTML=`
+  <div class="filter-bar">
+    <button class="btn btn-primary" onclick="openPrM(null)">+ Nouveau professeur</button>
+    <input id="pfs" type="text" placeholder="🔍 Rechercher nom/email…" oninput="renderProfList(this.value,document.getElementById('pfsig')?.value||'')" style="padding:7px 10px;border:1.5px solid #DDE3EA;border-radius:6px;font-size:13px;min-width:200px"/>
+    <select id="pfsig" onchange="renderProfList(document.getElementById('pfs')?.value||'',this.value)"><option value="">Tous sièges</option>${sigFiltO}</select>
+  </div>
   <div class="panel"><div class="tbl-wrap"><table>
     <thead><tr><th>Nom</th><th>Email</th><th>Téléphone</th><th>Siège</th><th>Taux horaire</th><th>Recrutement</th><th>Statut</th><th>Actions</th></tr></thead>
-    <tbody>${profs.length?profs.map(p=>`<tr>
+    <tbody>${list.length?list.map(p=>`<tr>
       <td><strong>${p.nom} ${p.prenom}</strong></td><td>${p.email||'—'}</td><td>${p.telephone||'—'}</td>
       <td>${p.sieges?.nom||'—'}</td><td>${p.taux_horaire?p.taux_horaire+' DA/h':'—'}</td>
       <td>${fmtDate(p.date_recrutement)}</td>
       <td>${p.actif?badge('actif'):badge('inactif')}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="openPrM(${JSON.stringify(p).replace(/"/g,'&quot;')},'${sO.replace(/'/g,"\\'")}')">✏️</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="openPrM(${JSON.stringify(p).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-sm" style="background:${p.actif?'#636e72':'var(--success)'};color:#fff" onclick="toggleProfActif('${p.id}',${p.actif})">${p.actif?'⏸':'▶'}</button>
+        <button class="btn btn-danger btn-sm" onclick="delProf('${p.id}','${p.nom} ${p.prenom}')">🗑</button>
+      </td>
     </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><div class="icon">👨‍🏫</div>Aucun professeur</div></td></tr>`}
     </tbody></table></div></div>`;
 }
-function openPrM(p,sO){
+function openPrM(p){
+  const {sigs,matieres}=window._PD;
+  const sO=sigs.map(s=>`<option value="${s.id}" ${p?.siege_id===s.id?'selected':''}>${s.nom}</option>`).join('');
   openModal(`<div class="modal-title">${p?'Modifier':'Nouveau'} professeur</div>
   <input type="hidden" id="pr-id" value="${p?.id||''}"/>
   <div class="form-row"><div class="form-group"><label>Prénom</label><input id="pr-pn" value="${p?.prenom||''}"/></div><div class="form-group"><label>Nom</label><input id="pr-nm" value="${p?.nom||''}"/></div></div>
   <div class="form-row"><div class="form-group"><label>Email</label><input id="pr-em" type="email" value="${p?.email||''}"/></div><div class="form-group"><label>Téléphone</label><input id="pr-tel" value="${p?.telephone||''}"/></div></div>
-  <div class="form-row"><div class="form-group"><label>Siège</label><select id="pr-sg"><option value="">—</option>${sO}</select></div><div class="form-group"><label>Taux horaire DA</label><input id="pr-tx" type="number" value="${p?.taux_horaire||0}"/></div></div>
-  <div class="form-group"><label>Date recrutement</label><input id="pr-dr" type="date" value="${p?.date_recrutement||''}"/></div>
-  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="savePr()">💾</button></div>`);
-  if(p?.siege_id)setTimeout(()=>document.getElementById('pr-sg').value=p.siege_id,60);
+  <div class="form-row"><div class="form-group"><label>Siège</label><select id="pr-sg"><option value="">—</option>${sO}</select></div><div class="form-group"><label>Taux horaire DA/h</label><input id="pr-tx" type="number" value="${p?.taux_horaire||0}"/></div></div>
+  <div class="form-row"><div class="form-group"><label>Date recrutement</label><input id="pr-dr" type="date" value="${p?.date_recrutement||''}"/></div><div class="form-group"><label>Statut</label><select id="pr-ac"><option value="true" ${p?.actif\!==false?'selected':''}>Actif</option><option value="false" ${p?.actif===false?'selected':''}>Inactif</option></select></div></div>
+  <div class="form-group"><label>Spécialité / Notes</label><textarea id="pr-no" rows="2">${p?.notes||''}</textarea></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="savePr()">💾 Enregistrer</button></div>`);
 }
 async function savePr(){
   const id=document.getElementById('pr-id').value;
-  const payload={prenom:document.getElementById('pr-pn').value,nom:document.getElementById('pr-nm').value,email:document.getElementById('pr-em').value||null,telephone:document.getElementById('pr-tel').value||null,siege_id:document.getElementById('pr-sg').value||null,taux_horaire:parseFloat(document.getElementById('pr-tx').value)||0,date_recrutement:document.getElementById('pr-dr').value||null};
+  const payload={prenom:document.getElementById('pr-pn').value,nom:document.getElementById('pr-nm').value,email:document.getElementById('pr-em').value||null,telephone:document.getElementById('pr-tel').value||null,siege_id:document.getElementById('pr-sg').value||null,taux_horaire:parseFloat(document.getElementById('pr-tx').value)||0,date_recrutement:document.getElementById('pr-dr').value||null,actif:document.getElementById('pr-ac').value==='true',notes:document.getElementById('pr-no').value||null};
   const {error}=id?await sb.from('professeurs').update(payload).eq('id',id):await sb.from('professeurs').insert(payload);
   if(error)toast(error.message,'error');else{toast('Professeur enregistré','success');closeModal();renderProfesseurs();}
 }
+async function toggleProfActif(id,cur){
+  const {error}=await sb.from('professeurs').update({actif:\!cur}).eq('id',id);
+  if(error)toast(error.message,'error');else{toast(cur?'Professeur désactivé':'Professeur activé','success');renderProfesseurs();}
+}
+async function delProf(id,nom){
+  if(\!confirm(`Supprimer le professeur "${nom}" ? Cette action est irréversible.`))return;
+  const {error}=await sb.from('professeurs').delete().eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Professeur supprimé','success');renderProfesseurs();}
+}
+
+</script>
+<script>
 // ── ÉLÈVES ─────────────────────────────────────────────────────────────
 async function renderEleves(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  const [eR,clR]=await Promise.all([sb.from('eleves').select('*,niveaux_classes(niveau,classe)').order('nom'),sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true)]);
-  const elvs=eR.data||[],cls=clR.data||[];
+  const [eR,clR]=await Promise.all([sb.from('eleves').select('*,niveaux_classes(niveau,classe)').order('nom'),sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau')]);
+  window._ED={elvs:eR.data||[],cls:clR.data||[]};
+  renderElvList('','','');
+}
+function renderElvList(fs,fcl,fst){
+  const {elvs,cls}=window._ED;
+  let list=elvs;
+  if(fs)list=list.filter(e=>(e.nom+' '+e.prenom+' '+(e.email||'')).toLowerCase().includes(fs.toLowerCase()));
+  if(fcl)list=list.filter(e=>e.classe_id===fcl);
+  if(fst)list=list.filter(e=>e.statut===fst);
   const cO=cls.map(cl=>`<option value="${cl.id}">${cl.niveau} ${cl.classe||''}</option>`).join('');
-  c.innerHTML=`<div style="margin-bottom:16px"><button class="btn btn-primary" onclick="openElM(null,'${cO.replace(/'/g,"\\'")}')">+ Nouvel élève</button></div>
+  const clFiltO=cls.map(cl=>`<option value="${cl.id}">${cl.niveau} ${cl.classe||''}</option>`).join('');
+  document.getElementById('content').innerHTML=`
+  <div class="filter-bar">
+    <button class="btn btn-primary" onclick="openElM(null)">+ Nouvel élève</button>
+    <input id="efs" type="text" placeholder="🔍 Rechercher…" oninput="renderElvList(this.value,document.getElementById('efcl')?.value||'',document.getElementById('efst')?.value||'')" style="padding:7px 10px;border:1.5px solid #DDE3EA;border-radius:6px;font-size:13px;min-width:200px"/>
+    <select id="efcl" onchange="renderElvList(document.getElementById('efs')?.value||'',this.value,document.getElementById('efst')?.value||'')"><option value="">Toutes classes</option>${clFiltO}</select>
+    <select id="efst" onchange="renderElvList(document.getElementById('efs')?.value||'',document.getElementById('efcl')?.value||'',this.value)">
+      <option value="">Tous statuts</option><option value="actif">Actif</option><option value="inactif">Inactif</option><option value="suspendu">Suspendu</option><option value="resilie">Résilié</option>
+    </select>
+  </div>
   <div class="panel"><div class="tbl-wrap"><table>
-    <thead><tr><th>Nom</th><th>Classe</th><th>Téléphone</th><th>Téléphone parent</th><th>Inscription</th><th>Moyenne</th><th>Statut</th><th>Actions</th></tr></thead>
-    <tbody>${elvs.length?elvs.map(e=>`<tr>
-      <td><strong>${e.nom} ${e.prenom}</strong></td>
+    <thead><tr><th>Nom</th><th>Classe</th><th>Téléphone</th><th>Parent</th><th>Inscription</th><th>Moyenne</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${list.length?list.map(e=>`<tr>
+      <td><strong>${e.nom} ${e.prenom}</strong><br><small style="color:var(--muted)">${e.email||''}</small></td>
       <td>${e.niveaux_classes?e.niveaux_classes.niveau+' '+(e.niveaux_classes.classe||''):'—'}</td>
       <td>${e.telephone||'—'}</td><td>${e.telephone_parent||'—'}</td>
       <td>${fmtDate(e.date_inscription)}</td>
-      <td>${e.moyenne_scolaire!=null?e.moyenne_scolaire+'/20':'—'}</td>
-      <td>${badge(e.statut)}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="openElM(${JSON.stringify(e).replace(/"/g,'&quot;')},'${cO.replace(/'/g,"\\'")}')">✏️</button></td>
+      <td>${e.moyenne_scolaire\!=null?`<strong>${e.moyenne_scolaire}/20</strong>`:'—'}</td>
+      <td>${badge(e.statut||'actif')}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="openElM(${JSON.stringify(e).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="delElv('${e.id}','${e.nom} ${e.prenom}')">🗑</button>
+      </td>
     </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><div class="icon">🎒</div>Aucun élève</div></td></tr>`}
     </tbody></table></div></div>`;
 }
-function openElM(e,cO){
+function openElM(e){
+  const cO=window._ED.cls.map(cl=>`<option value="${cl.id}" ${e?.classe_id===cl.id?'selected':''}>${cl.niveau} ${cl.classe||''}</option>`).join('');
   openModal(`<div class="modal-title">${e?'Modifier':'Nouvel'} élève</div>
   <input type="hidden" id="el-id" value="${e?.id||''}"/>
   <div class="form-row"><div class="form-group"><label>Prénom</label><input id="el-pn" value="${e?.prenom||''}"/></div><div class="form-group"><label>Nom</label><input id="el-nm" value="${e?.nom||''}"/></div></div>
   <div class="form-row"><div class="form-group"><label>Tél. élève</label><input id="el-tel" value="${e?.telephone||''}"/></div><div class="form-group"><label>Tél. parent</label><input id="el-tp" value="${e?.telephone_parent||''}"/></div></div>
-  <div class="form-row"><div class="form-group"><label>Classe</label><select id="el-cl"><option value="">—</option>${cO}</select></div><div class="form-group"><label>Statut</label><select id="el-st"><option value="actif">Actif</option><option value="inactif">Inactif</option><option value="suspendu">Suspendu</option><option value="resilie">Résilié</option></select></div></div>
-  <div class="form-row"><div class="form-group"><label>Moyenne /20</label><input id="el-moy" type="number" min="0" max="20" step="0.5" value="${e?.moyenne_scolaire||''}"/></div><div class="form-group"><label>Email</label><input id="el-em" value="${e?.email||''}"/></div></div>
-  <div class="form-group"><label>Établissement scolaire</label><input id="el-et" value="${e?.etablissement_scolaire||''}"/></div>
-  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveEl()">💾</button></div>`);
-  if(e?.classe_id)setTimeout(()=>{document.getElementById('el-cl').value=e.classe_id;document.getElementById('el-st').value=e.statut||'actif';},60);
+  <div class="form-row"><div class="form-group"><label>Classe</label><select id="el-cl"><option value="">—</option>${cO}</select></div><div class="form-group"><label>Statut</label><select id="el-st"><option value="actif" ${(\!e||e?.statut==='actif')?'selected':''}>Actif</option><option value="inactif" ${e?.statut==='inactif'?'selected':''}>Inactif</option><option value="suspendu" ${e?.statut==='suspendu'?'selected':''}>Suspendu</option><option value="resilie" ${e?.statut==='resilie'?'selected':''}>Résilié</option></select></div></div>
+  <div class="form-row"><div class="form-group"><label>Moyenne /20</label><input id="el-moy" type="number" min="0" max="20" step="0.5" value="${e?.moyenne_scolaire||''}"/></div><div class="form-group"><label>Email</label><input id="el-em" type="email" value="${e?.email||''}"/></div></div>
+  <div class="form-row"><div class="form-group"><label>Établissement</label><input id="el-et" value="${e?.etablissement_scolaire||''}"/></div><div class="form-group"><label>Date inscription</label><input id="el-di" type="date" value="${e?.date_inscription||today()}"/></div></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveEl()">💾 Enregistrer</button></div>`);
 }
 async function saveEl(){
   const id=document.getElementById('el-id').value;
   const m=document.getElementById('el-moy').value;
-  const payload={prenom:document.getElementById('el-pn').value,nom:document.getElementById('el-nm').value,telephone:document.getElementById('el-tel').value||null,telephone_parent:document.getElementById('el-tp').value||null,email:document.getElementById('el-em').value||null,classe_id:document.getElementById('el-cl').value||null,statut:document.getElementById('el-st').value,moyenne_scolaire:m?parseFloat(m):null,etablissement_scolaire:document.getElementById('el-et').value||null};
+  const payload={prenom:document.getElementById('el-pn').value,nom:document.getElementById('el-nm').value,telephone:document.getElementById('el-tel').value||null,telephone_parent:document.getElementById('el-tp').value||null,email:document.getElementById('el-em').value||null,classe_id:document.getElementById('el-cl').value||null,statut:document.getElementById('el-st').value,moyenne_scolaire:m?parseFloat(m):null,etablissement_scolaire:document.getElementById('el-et').value||null,date_inscription:document.getElementById('el-di').value||null};
   const {error}=id?await sb.from('eleves').update(payload).eq('id',id):await sb.from('eleves').insert(payload);
   if(error)toast(error.message,'error');else{toast('Élève enregistré','success');closeModal();renderEleves();}
 }
+async function delElv(id,nom){
+  if(\!confirm(`Supprimer l'élève "${nom}" ? Cette action est irréversible.`))return;
+  const {error}=await sb.from('eleves').delete().eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Élève supprimé','success');renderEleves();}
+}
+
 </script>
 <script>
 // ── SALAIRES ───────────────────────────────────────────────────────────
 async function renderSalaires(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  const [sR]=await Promise.all([sb.from('salaires').select('*,professeurs(prenom,nom)').order('mois',{ascending:false}).order('created_at',{ascending:false})]);
-  const sal=sR.data||[];
-  const mOpts=[...Array(6)].map((_,i)=>{const d=new Date();d.setMonth(d.getMonth()-i);const v=d.toISOString().slice(0,8)+'01';return`<option value="${v}">${d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</option>`;}).join('');
+  const mois=document.getElementById('sal-mois')?.value||new Date().toISOString().slice(0,7);
+  const [sR,pR,sesR]=await Promise.all([
+    sb.from('salaires').select('*,professeurs(prenom,nom,taux_horaire)').order('mois',{ascending:false}),
+    sb.from('professeurs').select('id,prenom,nom,taux_horaire').eq('actif',true).order('nom'),
+    sb.from('sessions').select('professeur_id,heure_debut,heure_fin,statut,date_session').eq('statut','realisee')
+  ]);
+  const salaires=sR.data||[],profs=pR.data||[],sessions=sesR.data||[];
+  // Build months list
+  const moisList=[...new Set(salaires.map(s=>s.mois).concat([new Date().toISOString().slice(0,7),...Array.from({length:5},(_,i)=>{const d=new Date();d.setMonth(d.getMonth()-i-1);return d.toISOString().slice(0,7);})])].filter(Boolean))].sort().reverse();
+  const mOpts=moisList.map(m=>`<option value="${m}" ${m===mois?'selected':''}>${m}</option>`).join('');
+  // Sessions for selected month
+  const sesMois=sessions.filter(s=>s.date_session?.startsWith(mois));
+  // Group by prof
+  const profMap={};
+  sesMois.forEach(s=>{
+    if(\!s.professeur_id)return;
+    if(\!profMap[s.professeur_id])profMap[s.professeur_id]={sessions:[],heures:0};
+    profMap[s.professeur_id].sessions.push(s);
+    if(s.heure_debut&&s.heure_fin){
+      const[h1,m1]=s.heure_debut.split(':').map(Number);
+      const[h2,m2]=s.heure_fin.split(':').map(Number);
+      profMap[s.professeur_id].heures+=((h2*60+m2)-(h1*60+m1))/60;
+    }
+  });
+  // Existing salaires for this month
+  const salMois=salaires.filter(s=>s.mois===mois+'-01'||s.mois?.startsWith(mois));
+  const salByProf={};
+  salMois.forEach(s=>{salByProf[s.professeur_id]=s;});
   c.innerHTML=`
-  <div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <select id="sal-m" style="padding:8px 12px;border:1.5px solid #DDE3EA;border-radius:6px">${mOpts}</select>
-    <button class="btn btn-primary" onclick="calcSal()">🔄 Calculer salaires</button>
+  <div class="filter-bar">
+    <label style="font-weight:600;color:var(--muted)">Mois :</label>
+    <select id="sal-mois" onchange="renderSalaires()" style="padding:7px 10px;border:1.5px solid #DDE3EA;border-radius:6px;font-size:13px">${mOpts}</select>
+    <button class="btn btn-primary" onclick="calcSalaires('${mois}')">🔄 Calculer / Mettre à jour</button>
+    <button class="btn btn-outline btn-sm" onclick="dlSalCSV('${mois}')">⬇ CSV</button>
   </div>
-  <div class="panel"><div class="tbl-wrap"><table>
-    <thead><tr><th>Professeur</th><th>Mois</th><th>Sessions</th><th>Heures</th><th>Taux</th><th>Montant brut</th><th>Statut</th><th>Actions</th></tr></thead>
-    <tbody>${sal.length?sal.map(s=>`<tr>
-      <td><strong>${s.professeurs?s.professeurs.nom+' '+s.professeurs.prenom:'—'}</strong></td>
-      <td>${new Date(s.mois).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</td>
-      <td>${s.nb_sessions||0}</td><td>${s.nb_heures||0} h</td><td>${s.taux_horaire||0} DA/h</td>
-      <td><strong>${(s.montant_brut||0).toLocaleString('fr-FR')} DA</strong></td>
-      <td>${badge(s.statut)}</td>
-      <td>
-        ${s.statut==='calcule'?`<button class="btn btn-success btn-sm" onclick="valSal('${s.id}')">✔ Valider</button>`:''}
-        ${s.statut==='valide'?`<button class="btn btn-primary btn-sm" onclick="paySal('${s.id}')">💳 Payer</button>`:''}
-      </td>
-    </tr>`).join(''):`<tr><td colspan="8"><div class="empty"><div class="icon">💰</div>Aucun salaire calculé<br><small>Sélectionner un mois et calculer</small></div></td></tr>`}
-    </tbody></table></div></div>`;
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="label">Profs actifs ce mois</div><div class="value">${Object.keys(profMap).length}</div></div>
+    <div class="kpi-card orange"><div class="label">Séances réalisées</div><div class="value">${sesMois.length}</div></div>
+    <div class="kpi-card green"><div class="label">Total heures</div><div class="value">${Object.values(profMap).reduce((a,p)=>a+p.heures,0).toFixed(1)}h</div></div>
+    <div class="kpi-card ${salMois.filter(s=>s.statut==='paye').length===salMois.length&&salMois.length>0?'green':'orange'}"><div class="label">Payés / Total</div><div class="value">${salMois.filter(s=>s.statut==='paye').length} / ${salMois.length}</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">💰 Salaires — ${mois}</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Professeur</th><th>Séances</th><th>Heures</th><th>Taux DA/h</th><th>Montant total</th><th>Statut</th><th>Payé le</th><th>Actions</th></tr></thead>
+      <tbody>${profs.map(p=>{
+        const pm=profMap[p.id]||{sessions:[],heures:0};
+        const sal=salByProf[p.id];
+        const montant=pm.heures*(p.taux_horaire||0);
+        return`<tr>
+          <td><strong>${p.nom} ${p.prenom}</strong></td>
+          <td>${pm.sessions.length}</td>
+          <td>${pm.heures.toFixed(2)}h</td>
+          <td>${p.taux_horaire||0} DA</td>
+          <td><strong>${sal?sal.montant_total.toLocaleString('fr-DZ'):montant.toLocaleString('fr-DZ')} DA</strong></td>
+          <td>${sal?badge(sal.statut):pm.sessions.length>0?'<span class="badge badge-orange">non calculé</span>':'<span class="badge badge-grey">aucune séance</span>'}</td>
+          <td>${sal?.date_paiement?fmtDate(sal.date_paiement):'—'}</td>
+          <td style="white-space:nowrap">
+            ${pm.sessions.length>0&&(\!sal||sal.statut\!=='paye')?`<button class="btn btn-success btn-sm" onclick="marquerPaye('${p.id}','${mois}')">✔ Marquer payé</button>`:''}
+            ${sal?`<button class="btn btn-outline btn-sm" onclick="voirDetailSal('${p.id}','${mois}')">📋 Détail</button>`:''}
+          </td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+  window._salData={profs,profMap,salMois,mois};
 }
-async function calcSal(){
-  const mois=document.getElementById('sal-m').value;
-  const {data:profs}=await sb.from('professeurs').select('id,prenom,nom,taux_horaire').eq('actif',true);
-  if(!profs?.length){toast('Aucun professeur actif','');return;}
-  const moisF=new Date(mois);moisF.setMonth(moisF.getMonth()+1);const moisFs=moisF.toISOString().split('T')[0];
-  let n=0;
+async function calcSalaires(mois){
+  const {profs,profMap}=window._salData||{};
+  if(\!profs){toast('Rechargez la page','error');return;}
+  let ok=0;
   for(const p of profs){
-    const {data:ses}=await sb.from('sessions').select('heure_debut,heure_fin').eq('professeur_id',p.id).eq('statut','realisee').gte('date_session',mois).lt('date_session',moisFs);
-    if(!ses?.length)continue;
-    const nh=ses.reduce((t,s)=>{const[hd,md]=(s.heure_debut||'00:00').split(':').map(Number);const[hf,mf]=(s.heure_fin||'00:00').split(':').map(Number);return t+((hf*60+mf)-(hd*60+md))/60;},0);
-    await sb.from('salaires').upsert({professeur_id:p.id,mois,nb_sessions:ses.length,nb_heures:Math.round(nh*100)/100,taux_horaire:p.taux_horaire||0,montant_brut:Math.round(nh*(p.taux_horaire||0)*100)/100,statut:'calcule'},{onConflict:'professeur_id,mois'});
-    n++;
+    const pm=profMap[p.id];
+    if(\!pm||pm.sessions.length===0)continue;
+    const montant=pm.heures*(p.taux_horaire||0);
+    const {error}=await sb.from('salaires').upsert({
+      professeur_id:p.id,
+      mois:mois+'-01',
+      nb_sessions:pm.sessions.length,
+      total_heures:pm.heures,
+      montant_total:montant,
+      statut:'calcule'
+    },{onConflict:'professeur_id,mois'});
+    if(\!error)ok++;
   }
-  toast(`Salaires calculés pour ${n} professeur(s)  — ${mois}`,'success');renderSalaires();
+  toast(`${ok} salaire(s) calculé(s)✓`,'success');
+  renderSalaires();
 }
-async function valSal(id){const {error}=await sb.from('salaires').update({statut:'valide',valide_par:currentUser?.id}).eq('id',id);if(error)toast(error.message,'error');else{toast('Validé','success');renderSalaires();}}
-async function paySal(id){const d=prompt('Date paiement (AAAA-MM-JJ) :',today());if(!d)return;const {error}=await sb.from('salaires').update({statut:'paye',date_paiement:d}).eq('id',id);if(error)toast(error.message,'error');else{toast('Paiement enregistré','success');renderSalaires();}}
+async function marquerPaye(profId,mois){
+  const {error}=await sb.from('salaires').update({statut:'paye',date_paiement:today(),paye_par:currentUser?.id}).eq('professeur_id',profId).eq('mois',mois+'-01');
+  if(error){
+    // Try upsert if record doesn't exist
+    const {error:e2}=await sb.from('salaires').upsert({professeur_id:profId,mois:mois+'-01',statut:'paye',date_paiement:today(),paye_par:currentUser?.id},{onConflict:'professeur_id,mois'});
+    if(e2){toast(e2.message,'error');return;}
+  }
+  toast('Salaire marqué payé ✔','success');
+  renderSalaires();
+}
+async function voirDetailSal(profId,mois){
+  const {profMap,profs}=window._salData;
+  const p=profs.find(x=>x.id===profId);
+  const pm=profMap[profId]||{sessions:[],heures:0};
+  const rows=pm.sessions.map(s=>`<tr><td>${fmtDate(s.date_session)}</td><td>${fmtHour(s.heure_debut)}–${fmtHour(s.heure_fin)}</td><td>${s.heure_debut&&s.heure_fin?((parseInt(s.heure_fin)-parseInt(s.heure_debut))||'?')+' h':'—'}</td></tr>`).join('');
+  openModal(`<div class="modal-title">📋 Détail — ${p?.nom} ${p?.prenom} — ${mois}</div>
+  <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Horaire</th><th>Durée</th></tr></thead><tbody>${rows||'<tr><td colspan="3">Aucune séance</td></tr>'}</tbody></table></div>
+  <div style="margin-top:16px;font-weight:600">Total : ${pm.heures.toFixed(2)}h × ${p?.taux_horaire||0} DA = <strong>${(pm.heures*(p?.taux_horaire||0)).toLocaleString('fr-DZ')} DA</strong></div>
+  <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
+}
+function dlSalCSV(mois){
+  const {profs,profMap,salMois}=window._salData||{};
+  if(\!profs)return;
+  const rows=[['Professeur','Séances','Heures','Taux','Montant','Statut','Date paiement']];
+  const salByProf={};(salMois||[]).forEach(s=>{salByProf[s.professeur_id]=s;});
+  profs.forEach(p=>{
+    const pm=profMap[p.id]||{sessions:[],heures:0};
+    const sal=salByProf[p.id];
+    rows.push([p.nom+' '+p.prenom,pm.sessions.length,pm.heures.toFixed(2),p.taux_horaire||0,sal?.montant_total||(pm.heures*(p.taux_horaire||0)),sal?.statut||'non calculé',sal?.date_paiement||'']);
+  });
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.map(r=>r.join(',')).join('\n'));a.download='salaires_'+mois+'.csv';a.click();
+}
 
+</script>
+<script>
 // ── RÉFÉRENTIELS ───────────────────────────────────────────────────────
 async function renderReferentiels(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  const [sgR,slR,mR,clR]=await Promise.all([sb.from('sieges').select('*').order('nom'),sb.from('salles').select('*,sieges(nom)').order('nom'),sb.from('matieres').select('*').order('nom'),sb.from('niveaux_classes').select('*,sieges(nom)').order('niveau')]);
+  const [clR,mR,saR,sgR]=await Promise.all([
+    sb.from('niveaux_classes').select('*').order('niveau'),
+    sb.from('matieres').select('*').order('nom'),
+    sb.from('salles').select('*,sieges(nom)').order('nom'),
+    sb.from('sieges').select('*').order('nom')
+  ]);
+  window._RF={classes:clR.data||[],matieres:mR.data||[],salles:saR.data||[],sieges:sgR.data||[]};
   c.innerHTML=`
   <div class="tabs">
-    <div class="tab active" onclick="rtab('sg',this)">🏢 Sièges</div>
-    <div class="tab" onclick="rtab('sl',this)">🚪 Salles</div>
-    <div class="tab" onclick="rtab('ma',this)">📚 Matières</div>
-    <div class="tab" onclick="rtab('cl',this)">🎓 Classes</div>
+    <div class="tab active" onclick="rtab('cls',this)">🏫 Classes/Niveaux</div>
+    <div class="tab" onclick="rtab('mat',this)">📚 Matières</div>
+    <div class="tab" onclick="rtab('sal',this)">🏠 Salles</div>
+    <div class="tab" onclick="rtab('sieg',this)">📍 Sièges</div>
   </div>
-  <div id="rt-sg">
-    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openSgM()">+ Siège</button></div>
-    <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Nom</th><th>Ville</th><th>Adresse</th></tr></thead>
-    <tbody>${(sgR.data||[]).map(s=>`<tr><td><strong>${s.nom}</strong></td><td>${s.ville||'—'}</td><td>${s.adresse||'—'}</td></tr>`).join('')}</tbody></table></div></div>
-  </div>
-  <div id="rt-sl" style="display:none">
-    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openSlM()">+ Salle</button></div>
-    <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Nom</th><th>Siège</th><th>Capacité</th><th>Postes info</th></tr></thead>
-    <tbody>${(slR.data||[]).map(s=>`<tr><td><strong>${s.nom}</strong></td><td>${s.sieges?.nom||'—'}</td><td>${s.capacite||'—'}</td><td>${s.nb_postes_info||0}</td></tr>`).join('')}</tbody></table></div></div>
-  </div>
-  <div id="rt-ma" style="display:none">
-    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openMaM()">+ Matière</button></div>
-    <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Nom</th><th>Code</th><th>Actif</th></tr></thead>
-    <tbody>${(mR.data||[]).map(m=>`<tr><td><strong>${m.nom}</strong></td><td><span class="badge badge-blue">${m.code||'—'}</span></td><td>${m.actif?'✅':'❌'}</td></tr>`).join('')}</tbody></table></div></div>
-  </div>
-  <div id="rt-cl" style="display:none">
-    <div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openClM()">+ Classe</button></div>
-    <div class="panel"><div class="tbl-wrap"><table><thead><tr><th>Niveau</th><th>Classe</th><th>Siège</th><th>Effectif</th><th>Année</th></tr></thead>
-    <tbody>${(clR.data||[]).map(cl=>`<tr><td>${cl.niveau}</td><td>${cl.classe||'—'}</td><td>${cl.sieges?.nom||'—'}</td><td>${cl.effectif||0}</td><td>${cl.annee_scolaire||'—'}</td></tr>`).join('')}</tbody></table></div></div>
-  </div>`;
+  <div id="rt-cls">${buildClassesTab()}</div>
+  <div id="rt-mat" style="display:none">${buildMatiTab()}</div>
+  <div id="rt-sal" style="display:none">${buildSallesTab()}</div>
+  <div id="rt-sieg" style="display:none">${buildSiegesTab()}</div>`;
 }
 function rtab(t,el){
   document.querySelectorAll('.tabs .tab').forEach(x=>x.classList.remove('active'));el.classList.add('active');
-  ['sg','sl','ma','cl'].forEach(x=>{const e=document.getElementById('rt-'+x);if(e)e.style.display=x===t?'block':'none';});
+  ['cls','mat','sal','sieg'].forEach(x=>{const e=document.getElementById('rt-'+x);if(e)e.style.display=x===t?'block':'none';});
 }
-function openSgM(){openModal(`<div class="modal-title">🏢 Nouveau siège</div><div class="form-group"><label>Nom</label><input id="sg-n" placeholder="Siège Central"/></div><div class="form-group"><label>Ville</label><input id="sg-v"/></div><div class="form-group"><label>Adresse</label><textarea id="sg-a" rows="2"></textarea></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveSg()">💾</button></div>`);}
-async function saveSg(){const {error}=await sb.from('sieges').insert({nom:document.getElementById('sg-n').value,ville:document.getElementById('sg-v').value||null,adresse:document.getElementById('sg-a').value||null});if(error)toast(error.message,'error');else{toast('Siège créé','success');closeModal();renderReferentiels();}}
-function openSlM(){openModal(`<div class="modal-title">🚪 Nouvelle salle</div><div class="form-group"><label>Nom</label><input id="sl-n" placeholder="Salle A"/></div><div class="form-row"><div class="form-group"><label>Capacité</label><input id="sl-c" type="number" value="20"/></div><div class="form-group"><label>Postes info</label><input id="sl-p" type="number" value="0"/></div></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveSl()">💾</button></div>`);}
-async function saveSl(){const {error}=await sb.from('salles').insert({nom:document.getElementById('sl-n').value,capacite:parseInt(document.getElementById('sl-c').value)||20,nb_postes_info:parseInt(document.getElementById('sl-p').value)||0});if(error)toast(error.message,'error');else{toast('Salle créée','success');closeModal();renderReferentiels();}}
-function openMaM(){openModal(`<div class="modal-title">📚 Nouvelle matière</div><div class="form-row"><div class="form-group"><label>Nom</label><input id="ma-n" placeholder="Mathématiques"/></div><div class="form-group"><label>Code</label><input id="ma-c" placeholder="MATH"/></div></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveMa()">💾</button></div>`);}
-async function saveMa(){const {error}=await sb.from('matieres').insert({nom:document.getElementById('ma-n').value,code:document.getElementById('ma-c').value.toUpperCase()||null});if(error)toast(error.message,'error');else{toast('Matière créée','success');closeModal();renderReferentiels();}}
-function openClM(){openModal(`<div class="modal-title">🎓 Nouvelle classe</div><div class="form-row"><div class="form-group"><label>Niveau</label><input id="cl-n" placeholder="3ème"/></div><div class="form-group"><label>Classe</label><input id="cl-c" placeholder="A"/></div></div><div class="form-row"><div class="form-group"><label>Effectif</label><input id="cl-e" type="number" value="25"/></div><div class="form-group"><label>Année scolaire</label><input id="cl-a" value="2025-2026"/></div></div><div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveCl()">💾</button></div>`);}
-async function saveCl(){const {error}=await sb.from('niveaux_classes').insert({niveau:document.getElementById('cl-n').value,classe:document.getElementById('cl-c').value||null,effectif:parseInt(document.getElementById('cl-e').value)||0,annee_scolaire:document.getElementById('cl-a').value||'2025-2026'});if(error)toast(error.message,'error');else{toast('Classe créée','success');closeModal();renderReferentiels();}}
+// ── CLASSES ──
+function buildClassesTab(){
+  const {classes}=window._RF;
+  return`<div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openClM(null)">+ Nouvelle classe</button></div>
+  <div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Niveau</th><th>Classe</th><th>Capacité max</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${classes.length?classes.map(cl=>`<tr>
+      <td><strong>${cl.niveau}</strong></td><td>${cl.classe||'—'}</td>
+      <td>${cl.capacite_max||'—'}</td><td>${cl.actif?badge('actif'):badge('inactif')}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="openClM(${JSON.stringify(cl).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="delRef('niveaux_classes','${cl.id}','renderReferentiels')">🗑</button>
+      </td>
+    </tr>`).join(''):`<tr><td colspan="5"><div class="empty"><div class="icon">🏫</div>Aucune classe</div></td></tr>`}
+    </tbody></table></div></div>`;
+}
+function openClM(cl){
+  openModal(`<div class="modal-title">${cl?'Modifier':'Nouvelle'} classe</div>
+  <input type="hidden" id="cl-id" value="${cl?.id||''}"/>
+  <div class="form-row"><div class="form-group"><label>Niveau</label><input id="cl-nv" placeholder="Ex: 3ème, Terminale…" value="${cl?.niveau||''}"/></div><div class="form-group"><label>Classe (optionnel)</label><input id="cl-cl" placeholder="Ex: A, B…" value="${cl?.classe||''}"/></div></div>
+  <div class="form-row"><div class="form-group"><label>Capacité max</label><input id="cl-cap" type="number" value="${cl?.capacite_max||''}"/></div><div class="form-group"><label>Statut</label><select id="cl-ac"><option value="true" ${cl?.actif\!==false?'selected':''}>Actif</option><option value="false" ${cl?.actif===false?'selected':''}>Inactif</option></select></div></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveCl()">💾</button></div>`);
+}
+async function saveCl(){
+  const id=document.getElementById('cl-id').value;
+  const payload={niveau:document.getElementById('cl-nv').value,classe:document.getElementById('cl-cl').value||null,capacite_max:parseInt(document.getElementById('cl-cap').value)||null,actif:document.getElementById('cl-ac').value==='true'};
+  const {error}=id?await sb.from('niveaux_classes').update(payload).eq('id',id):await sb.from('niveaux_classes').insert(payload);
+  if(error)toast(error.message,'error');else{toast('Classe enregistrée','success');closeModal();renderReferentiels();}
+}
+// ── MATIÈRES ──
+function buildMatiTab(){
+  const {matieres}=window._RF;
+  return`<div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openMaM(null)">+ Nouvelle matière</button></div>
+  <div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Nom</th><th>Code</th><th>Couleur</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${matieres.length?matieres.map(m=>`<tr>
+      <td><strong>${m.nom}</strong></td>
+      <td><span class="badge badge-blue">${m.code||'—'}</span></td>
+      <td>${m.couleur?`<span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:${m.couleur};vertical-align:middle"></span>`:'—'}</td>
+      <td>${m.actif?badge('actif'):badge('inactif')}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="openMaM(${JSON.stringify(m).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="delRef('matieres','${m.id}','renderReferentiels')">🗑</button>
+      </td>
+    </tr>`).join(''):`<tr><td colspan="5"><div class="empty"><div class="icon">📚</div>Aucune matière</div></td></tr>`}
+    </tbody></table></div></div>`;
+}
+function openMaM(m){
+  openModal(`<div class="modal-title">${m?'Modifier':'Nouvelle'} matière</div>
+  <input type="hidden" id="ma-id" value="${m?.id||''}"/>
+  <div class="form-row"><div class="form-group"><label>Nom</label><input id="ma-nm" value="${m?.nom||''}"/></div><div class="form-group"><label>Code court</label><input id="ma-cd" placeholder="Ex: MATH, PHY…" value="${m?.code||''}"/></div></div>
+  <div class="form-row"><div class="form-group"><label>Couleur (hex)</label><input id="ma-col" type="color" value="${m?.couleur||'#2E75B6'}"/></div><div class="form-group"><label>Statut</label><select id="ma-ac"><option value="true" ${m?.actif\!==false?'selected':''}>Actif</option><option value="false" ${m?.actif===false?'selected':''}>Inactif</option></select></div></div>
+  <div class="form-group"><label>Description</label><textarea id="ma-desc" rows="2">${m?.description||''}</textarea></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveMa()">💾</button></div>`);
+}
+async function saveMa(){
+  const id=document.getElementById('ma-id').value;
+  const payload={nom:document.getElementById('ma-nm').value,code:document.getElementById('ma-cd').value||null,couleur:document.getElementById('ma-col').value||null,actif:document.getElementById('ma-ac').value==='true',description:document.getElementById('ma-desc').value||null};
+  const {error}=id?await sb.from('matieres').update(payload).eq('id',id):await sb.from('matieres').insert(payload);
+  if(error)toast(error.message,'error');else{toast('Matière enregistrée','success');closeModal();renderReferentiels();}
+}
+// ── SALLES ──
+function buildSallesTab(){
+  const {salles,sieges}=window._RF;
+  return`<div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openSaM(null)">+ Nouvelle salle</button></div>
+  <div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Nom</th><th>Siège</th><th>Type</th><th>Capacité</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${salles.length?salles.map(s=>`<tr>
+      <td><strong>${s.nom}</strong></td><td>${s.sieges?.nom||'—'}</td>
+      <td>${s.type_salle||'—'}</td><td>${s.capacite||'—'}</td>
+      <td>${s.actif?badge('actif'):badge('inactif')}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="openSaM(${JSON.stringify(s).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="delRef('salles','${s.id}','renderReferentiels')">🗑</button>
+      </td>
+    </tr>`).join(''):`<tr><td colspan="6"><div class="empty"><div class="icon">🏠</div>Aucune salle</div></td></tr>`}
+    </tbody></table></div></div>`;
+}
+function openSaM(s){
+  const {sieges}=window._RF;
+  const sgO=sieges.map(sg=>`<option value="${sg.id}" ${s?.siege_id===sg.id?'selected':''}>${sg.nom}</option>`).join('');
+  openModal(`<div class="modal-title">${s?'Modifier':'Nouvelle'} salle</div>
+  <input type="hidden" id="sa-id" value="${s?.id||''}"/>
+  <div class="form-row"><div class="form-group"><label>Nom</label><input id="sa-nm" value="${s?.nom||''}"/></div><div class="form-group"><label>Siège</label><select id="sa-sg"><option value="">—</option>${sgO}</select></div></div>
+  <div class="form-row"><div class="form-group"><label>Type</label><select id="sa-ty"><option value="salle_classe" ${s?.type_salle==='salle_classe'?'selected':''}>Salle de classe</option><option value="amphi" ${s?.type_salle==='amphi'?'selected':''}>Amphithéâtre</option><option value="labo" ${s?.type_salle==='labo'?'selected':''}>Laboratoire</option><option value="virtuel" ${s?.type_salle==='virtuel'?'selected':''}>Virtuel/En ligne</option></select></div><div class="form-group"><label>Capacité</label><input id="sa-cap" type="number" value="${s?.capacite||''}"/></div></div>
+  <div class="form-group"><label>Statut</label><select id="sa-ac"><option value="true" ${s?.actif\!==false?'selected':''}>Actif</option><option value="false" ${s?.actif===false?'selected':''}>Inactif</option></select></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveSa()">💾</button></div>`);
+}
+async function saveSa(){
+  const id=document.getElementById('sa-id').value;
+  const payload={nom:document.getElementById('sa-nm').value,siege_id:document.getElementById('sa-sg').value||null,type_salle:document.getElementById('sa-ty').value,capacite:parseInt(document.getElementById('sa-cap').value)||null,actif:document.getElementById('sa-ac').value==='true'};
+  const {error}=id?await sb.from('salles').update(payload).eq('id',id):await sb.from('salles').insert(payload);
+  if(error)toast(error.message,'error');else{toast('Salle enregistrée','success');closeModal();renderReferentiels();}
+}
+// ── SIÈGES ──
+function buildSiegesTab(){
+  const {sieges}=window._RF;
+  return`<div style="margin-bottom:12px"><button class="btn btn-primary" onclick="openSgM(null)">+ Nouveau siège</button></div>
+  <div class="panel"><div class="tbl-wrap"><table>
+    <thead><tr><th>Nom</th><th>Adresse</th><th>Téléphone</th><th>Responsable</th><th>Statut</th><th>Actions</th></tr></thead>
+    <tbody>${sieges.length?sieges.map(s=>`<tr>
+      <td><strong>${s.nom}</strong></td><td>${s.adresse||'—'}</td>
+      <td>${s.telephone||'—'}</td><td>${s.responsable||'—'}</td>
+      <td>${s.actif?badge('actif'):badge('inactif')}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-outline btn-sm" onclick="openSgM(${JSON.stringify(s).replace(/"/g,'&quot;')})">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="delRef('sieges','${s.id}','renderReferentiels')">🗑</button>
+      </td>
+    </tr>`).join(''):`<tr><td colspan="6"><div class="empty"><div class="icon">📍</div>Aucun siège</div></td></tr>`}
+    </tbody></table></div></div>`;
+}
+function openSgM(s){
+  openModal(`<div class="modal-title">${s?'Modifier':'Nouveau'} siège</div>
+  <input type="hidden" id="sg-id" value="${s?.id||''}"/>
+  <div class="form-row"><div class="form-group"><label>Nom</label><input id="sg-nm" value="${s?.nom||''}"/></div><div class="form-group"><label>Téléphone</label><input id="sg-tel" value="${s?.telephone||''}"/></div></div>
+  <div class="form-group"><label>Adresse</label><input id="sg-adr" value="${s?.adresse||''}"/></div>
+  <div class="form-row"><div class="form-group"><label>Responsable</label><input id="sg-res" value="${s?.responsable||''}"/></div><div class="form-group"><label>Statut</label><select id="sg-ac"><option value="true" ${s?.actif\!==false?'selected':''}>Actif</option><option value="false" ${s?.actif===false?'selected':''}>Inactif</option></select></div></div>
+  <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="saveSg()">💾</button></div>`);
+}
+async function saveSg(){
+  const id=document.getElementById('sg-id').value;
+  const payload={nom:document.getElementById('sg-nm').value,telephone:document.getElementById('sg-tel').value||null,adresse:document.getElementById('sg-adr').value||null,responsable:document.getElementById('sg-res').value||null,actif:document.getElementById('sg-ac').value==='true'};
+  const {error}=id?await sb.from('sieges').update(payload).eq('id',id):await sb.from('sieges').insert(payload);
+  if(error)toast(error.message,'error');else{toast('Siège enregistré','success');closeModal();renderReferentiels();}
+}
+// ── Generic delete ──
+async function delRef(table,id,reloadFn){
+  if(\!confirm('Supprimer cet élément ? Cette action est irréversible.'))return;
+  const {error}=await sb.from(table).delete().eq('id',id);
+  if(error)toast(error.message,'error');else{toast('Supprimé','success');if(window[reloadFn])window[reloadFn]();}
+}
 
-// ── INIT ───────────────────────────────────────────────────────────────
-sb.auth.getSession();
 </script>
 </body>
 </html>
