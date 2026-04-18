@@ -8,4 +8,4 @@ const SUPABASE_URL  = 'https://cmdjcyaqdmyvwiuyqsat.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_kNFEG0TUsejL8nUZJWkf1w_9jGpvq6d';
 
 // Nom de l'application (apparaît dans la barre latérale)
-const APP_NAME      = 'archipel';
+const APP_NAME      = 'OnlineOS';

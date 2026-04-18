@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>SNO — Soutien Scolaire</title>
+<title>Archipel Online OS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="config.js"></script>
@@ -27,10 +27,23 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 #topbar h1{font-size:17px;font-weight:600;color:var(--primary);flex:1;}
 #topbar .badge{background:var(--accent);color:var(--secondary);padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;}
 #content{flex:1;overflow-y:auto;padding:24px;}
-#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--primary),var(--secondary));}
-.login-card{background:var(--white);border-radius:12px;padding:40px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.2);}
-.login-card h2{color:var(--primary);margin-bottom:6px;font-size:22px;}
-.login-card p{color:var(--muted);font-size:13px;margin-bottom:24px;}
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0D2137,var(--primary),var(--secondary));}
+.login-card{background:var(--white);border-radius:16px;padding:40px;width:400px;box-shadow:0 24px 80px rgba(0,0,0,.35);}
+.login-brand{text-align:center;margin-bottom:28px;}
+.login-brand .brand-logo{font-size:32px;margin-bottom:8px;}
+.login-brand h2{color:var(--primary);font-size:20px;font-weight:800;letter-spacing:-.3px;}
+.login-brand p{color:var(--muted);font-size:12px;margin-top:4px;}
+.login-tabs{display:flex;border-bottom:2px solid #EEF2F7;margin-bottom:24px;}
+.login-tab{flex:1;text-align:center;padding:10px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .2s;}
+.login-tab.active{color:var(--secondary);border-bottom-color:var(--secondary);}
+.btn-loading{opacity:.7;pointer-events:none;}
+.input-wrap{position:relative;}
+.input-wrap input{padding-right:40px;}
+.input-wrap .eye-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:4px;}
+.pwd-strength{height:3px;border-radius:2px;margin-top:4px;transition:all .3s;background:#EEF2F7;}
+.pwd-strength.weak{background:#E74C3C;width:33%;}
+.pwd-strength.medium{background:#F39C12;width:66%;}
+.pwd-strength.strong{background:#27AE60;width:100%;}
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:16px;margin-bottom:24px;}
 .kpi-card{background:var(--white);border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);border-left:4px solid var(--secondary);}
 .kpi-card.green{border-color:var(--success);}.kpi-card.orange{border-color:var(--warning);}.kpi-card.red{border-color:var(--danger);}
@@ -95,28 +108,91 @@ canvas{max-height:200px;}
 
 <div id="login-screen">
 <div class="login-card">
-  <h2>🎓 Soutien Scolaire en Ligne</h2>
-  <p>Système Nerveux Opérationnel — Connexion</p>
+  <div class="login-brand">
+    <div class="brand-logo">🏔️</div>
+    <h2>Archipel Online OS</h2>
+    <p>Système Nerveux Opérationnel — Soutien Scolaire</p>
+  </div>
+
+  <!-- Tabs Connexion / Inscription -->
+  <div class="login-tabs">
+    <div class="login-tab active" id="tab-login" onclick="switchAuthTab('login')">Connexion</div>
+    <div class="login-tab" id="tab-register" onclick="switchAuthTab('register')">Créer un compte</div>
+  </div>
+
+  <!-- Alertes -->
   <div id="login-alert"></div>
-  <div class="form-group"><label>Email</label><input id="li-email" type="email" placeholder="votre@email.com"/></div>
-  <div class="form-group"><label>Mot de passe</label><input id="li-pwd" type="password" placeholder="••••••••"/></div>
-  <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Se connecter</button>
-  <p style="margin-top:14px;text-align:center;font-size:12px;color:var(--muted)">
-    Pas de compte ? <a href="#" onclick="showReg()" style="color:var(--secondary)">S'inscrire</a>
-  </p>
-  <div id="reg-form" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid #EEF2F7">
+
+  <!-- ── FORMULAIRE CONNEXION ── -->
+  <div id="form-login">
+    <div class="form-group">
+      <label>Email</label>
+      <input id="li-email" type="email" placeholder="votre@email.com"
+             onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <div class="form-group">
+      <label>Mot de passe</label>
+      <div class="input-wrap">
+        <input id="li-pwd" type="password" placeholder="••••••••"
+               onkeydown="if(event.key==='Enter')doLogin()"/>
+        <button class="eye-btn" onclick="togglePwd('li-pwd',this)" tabindex="-1">👁</button>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-login" style="width:100%;margin-top:4px" onclick="doLogin()">
+      Se connecter
+    </button>
+    <p style="text-align:center;margin-top:14px;font-size:12px;color:var(--muted)">
+      <a href="#" onclick="showForgot()" style="color:var(--secondary)">Mot de passe oublié ?</a>
+    </p>
+  </div>
+
+  <!-- ── FORMULAIRE INSCRIPTION ── -->
+  <div id="form-register" style="display:none">
     <div class="form-row">
       <div class="form-group"><label>Prénom</label><input id="reg-pren" placeholder="Prénom"/></div>
       <div class="form-group"><label>Nom</label><input id="reg-nom2" placeholder="Nom"/></div>
     </div>
-    <button class="btn btn-success" style="width:100%" onclick="doRegister()">Créer le compte</button>
+    <div class="form-group">
+      <label>Email</label>
+      <input id="reg-email" type="email" placeholder="votre@email.com"/>
+    </div>
+    <div class="form-group">
+      <label>Mot de passe <span style="font-weight:400;text-transform:none">(8 car. min.)</span></label>
+      <div class="input-wrap">
+        <input id="reg-pwd" type="password" placeholder="••••••••" oninput="checkPwdStrength(this)"/>
+        <button class="eye-btn" onclick="togglePwd('reg-pwd',this)" tabindex="-1">👁</button>
+      </div>
+      <div class="pwd-strength" id="pwd-bar"></div>
+    </div>
+    <div id="reg-alert"></div>
+    <button class="btn btn-success" id="btn-register" style="width:100%;margin-top:4px" onclick="doRegister()">
+      Créer mon compte
+    </button>
+    <div class="alert alert-info" style="margin-top:14px;font-size:12px">
+      Après inscription, un administrateur devra attribuer votre rôle dans Supabase.
+    </div>
+  </div>
+
+  <!-- ── MOT DE PASSE OUBLIÉ ── -->
+  <div id="form-forgot" style="display:none">
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+      Entrez votre email pour recevoir un lien de réinitialisation.
+    </p>
+    <div class="form-group">
+      <label>Email</label>
+      <input id="forgot-email" type="email" placeholder="votre@email.com"/>
+    </div>
+    <button class="btn btn-primary" id="btn-forgot" style="width:100%" onclick="doForgot()">Envoyer le lien</button>
+    <p style="text-align:center;margin-top:12px;font-size:12px">
+      <a href="#" onclick="switchAuthTab('login')" style="color:var(--secondary)">Retour à la connexion</a>
+    </p>
   </div>
 </div>
 </div>
 
 <div id="app" style="display:none">
   <div id="sidebar">
-    <div class="logo">SNO <span id="sb-app-name">Soutien Scolaire</span></div>
+    <div class="logo">🏔️ Archipel <span id="sb-app-name">Online OS</span></div>
     <nav>
       <a onclick="nav('dashboard')" id="nav-dashboard"><span class="icon">📊</span>Tableau de bord</a>
       <a onclick="nav('planification')" id="nav-planification"><span class="icon">📅</span>Planification</a>
@@ -181,24 +257,121 @@ const SC={planifiee:'blue',realisee:'green',annulee:'red',reportee:'orange',vali
   resilie:'red',calcule:'blue',paye:'green'};
 function badge(v){const c=SC[v]||'grey';return`<span class="badge badge-${c}">${v||'—'}</span>`;}
 
+// ── Auth helpers ──────────────────────────────────────────────────────
+function switchAuthTab(tab){
+  ['login','register'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.toggle('active',t===tab);
+  });
+  document.getElementById('form-login').style.display   = tab==='login'    ? 'block' : 'none';
+  document.getElementById('form-register').style.display= tab==='register' ? 'block' : 'none';
+  document.getElementById('form-forgot').style.display  = 'none';
+}
+function showForgot(){
+  ['login','register'].forEach(t=>document.getElementById('tab-'+t).classList.remove('active'));
+  document.getElementById('form-login').style.display   ='none';
+  document.getElementById('form-register').style.display='none';
+  document.getElementById('form-forgot').style.display  ='block';
+}
+function togglePwd(inputId,btn){
+  const inp=document.getElementById(inputId);
+  if(!inp)return;
+  const show=inp.type==='password';
+  inp.type=show?'text':'password';
+  btn.textContent=show?'🙈':'👁️';
+}
+function checkPwdStrength(input){
+  const v=input.value;
+  const bar=document.getElementById('pwd-bar') || input.closest('.form-group')?.querySelector('.pwd-strength');
+  if(!bar)return;
+  let score=0;
+  if(v.length>=8)score++;
+  if(/[A-Z]/.test(v))score++;
+  if(/[0-9]/.test(v))score++;
+  if(/[^A-Za-z0-9]/.test(v))score++;
+  const levels=['','weak','fair','good','strong'];
+  bar.className='pwd-strength '+(levels[score]||'');
+  bar.style.width=(score*25)+'%';
+}
+
+function _frErr(msg){
+  if(!msg)return'Erreur inconnue';
+  if(msg.includes('Invalid login credentials'))return'Email ou mot de passe incorrect';
+  if(msg.includes('Email not confirmed'))return'Veuillez confirmer votre email';
+  if(msg.includes('User already registered'))return'Un compte existe déjà avec cet email';
+  if(msg.includes('Password should be'))return'Le mot de passe doit contenir au moins 6 caractères';
+  if(msg.includes('Unable to validate'))return'Adresse email invalide';
+  return msg;
+}
+
+function _setBtnLoading(id,loading){
+  const b=document.getElementById(id);
+  if(!b)return;
+  b.disabled=loading;
+  b.classList.toggle('btn-loading',loading);
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────
 async function doLogin(){
-  const email=document.getElementById('li-email').value;
-  const pwd=document.getElementById('li-pwd').value;
-  document.getElementById('login-alert').innerHTML='';
+  const email=(document.getElementById('li-email').value||'').trim();
+  const pwd  = document.getElementById('li-pwd').value;
+  const alert= document.getElementById('login-alert');
+  alert.innerHTML='';
+  if(!email||!pwd){alert.innerHTML='<div class="alert alert-danger">Remplissez tous les champs</div>';return;}
+  _setBtnLoading('btn-login',true);
   const {error}=await sb.auth.signInWithPassword({email,password:pwd});
-  if(error) document.getElementById('login-alert').innerHTML=`<div class="alert alert-danger">${error.message}</div>`;
+  _setBtnLoading('btn-login',false);
+  if(error) alert.innerHTML=`<div class="alert alert-danger">${_frErr(error.message)}</div>`;
 }
-function showReg(){document.getElementById('reg-form').style.display='block';}
+
 async function doRegister(){
-  const email=document.getElementById('li-email').value;
-  const pwd=document.getElementById('li-pwd').value;
-  const prenom=document.getElementById('reg-pren').value;
-  const nom=document.getElementById('reg-nom2').value;
-  const {error}=await sb.auth.signUp({email,password:pwd,options:{data:{prenom,nom}}});
-  if(error)toast(error.message,'error');
-  else toast('Compte créé ! Vérifiez votre email.','success');
+  const email =(document.getElementById('reg-email').value||'').trim();
+  const pwd   = document.getElementById('reg-pwd').value;
+  const prenom=(document.getElementById('reg-pren').value||'').trim();
+  const nom   =(document.getElementById('reg-nom2').value||'').trim();
+  const alert = document.getElementById('reg-alert');
+  alert.innerHTML='';
+  if(!email||!pwd){alert.innerHTML='<div class="alert alert-danger">Email et mot de passe requis</div>';return;}
+  if(pwd.length<6){alert.innerHTML='<div class="alert alert-danger">Mot de passe trop court (min 6 caractères)</div>';return;}
+  _setBtnLoading('btn-register',true);
+  const {data,error}=await sb.auth.signUp({
+    email, password:pwd,
+    options:{data:{prenom:prenom||email.split('@')[0], nom}}
+  });
+  if(error){
+    _setBtnLoading('btn-register',false);
+    alert.innerHTML=`<div class="alert alert-danger">${_frErr(error.message)}</div>`;
+    return;
+  }
+  // Fallback: upsert profile manually in case trigger failed
+  if(data?.user){
+    await sb.from('user_profiles').upsert({
+      id:data.user.id,
+      prenom:prenom||email.split('@')[0],
+      nom:nom||'',
+      role:'agent_saisie'
+    },{onConflict:'id',ignoreDuplicates:false});
+  }
+  _setBtnLoading('btn-register',false);
+  toast('Compte créé avec succès ! Vous pouvez vous connecter.','success');
+  switchAuthTab('login');
+  document.getElementById('li-email').value=email;
 }
+
+async function doForgot(){
+  const email=(document.getElementById('forgot-email').value||'').trim();
+  if(!email){toast('Entrez votre adresse email','error');return;}
+  _setBtnLoading('btn-forgot',true);
+  const {error}=await sb.auth.resetPasswordForEmail(email,{
+    redirectTo: location.origin+location.pathname
+  });
+  _setBtnLoading('btn-forgot',false);
+  if(error) toast(_frErr(error.message),'error');
+  else{
+    toast('Lien de réinitialisation envoyé !','success');
+    switchAuthTab('login');
+  }
+}
+
 async function doLogout(){await sb.auth.signOut();location.reload();}
 
 sb.auth.onAuthStateChange(async(_,session)=>{
@@ -214,13 +387,24 @@ sb.auth.onAuthStateChange(async(_,session)=>{
     document.getElementById('app').style.display='none';
   }
 });
+
 async function loadProfile(){
-  const {data}=await sb.from('user_profiles').select('*').eq('id',currentUser.id).single();
-  currentProfile=data;
-  if(data){
-    document.getElementById('user-name').textContent=(data.prenom+' '+data.nom).trim()||currentUser.email;
-    document.getElementById('user-role').textContent=data.role||'—';
+  const {data,error}=await sb.from('user_profiles').select('*').eq('id',currentUser.id).single();
+  if(!error && data){
+    currentProfile=data;
+  } else {
+    // Trigger may have failed — create profile now
+    const fallback={
+      id:currentUser.id,
+      prenom: currentUser.user_metadata?.prenom || currentUser.email.split('@')[0],
+      nom:    currentUser.user_metadata?.nom    || '',
+      role:   'agent_saisie'
+    };
+    await sb.from('user_profiles').upsert(fallback,{onConflict:'id',ignoreDuplicates:false});
+    currentProfile=fallback;
   }
+  document.getElementById('user-name').textContent=(currentProfile.prenom+' '+currentProfile.nom).trim()||currentUser.email;
+  document.getElementById('user-role').textContent=currentProfile.role||'—';
 }
 
 // ── Navigation ────────────────────────────────────────────────────────
