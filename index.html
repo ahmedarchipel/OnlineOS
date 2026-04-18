@@ -338,13 +338,26 @@ function _setBtnLoading(id,loading){
 async function doLogin(){
   const email=(document.getElementById('li-email').value||'').trim();
   const pwd  = document.getElementById('li-pwd').value;
-  const alert= document.getElementById('login-alert');
-  alert.innerHTML='';
-  if(!email||!pwd){alert.innerHTML='<div class="alert alert-danger">Remplissez tous les champs</div>';return;}
+  const alertDiv = document.getElementById('login-alert');
+  if(alertDiv) alertDiv.innerHTML='';
+
+  if(!email||!pwd){
+    if(alertDiv) alertDiv.innerHTML='<div class="alert alert-danger">Remplissez tous les champs</div>';
+    return;
+  }
+
   _setBtnLoading('btn-login',true);
-  const {error}=await sb.auth.signInWithPassword({email,password:pwd});
-  _setBtnLoading('btn-login',false);
-  if(error) alert.innerHTML=`<div class="alert alert-danger">${_frErr(error.message)}</div>`;
+  try {
+    const {data, error}=await sb.auth.signInWithPassword({email, password:pwd});
+    if(error){
+      if(alertDiv) alertDiv.innerHTML=`<div class="alert alert-danger">${_frErr(error.message)}</div>`;
+    }
+    // success → onAuthStateChange fires automatically
+  } catch(e){
+    if(alertDiv) alertDiv.innerHTML=`<div class="alert alert-danger">Erreur réseau : ${e.message}</div>`;
+  } finally {
+    _setBtnLoading('btn-login',false);
+  }
 }
 
 async function doRegister(){
@@ -428,10 +441,12 @@ async function doLogout(){await sb.auth.signOut();location.reload();}
 sb.auth.onAuthStateChange(async(_,session)=>{
   if(session?.user){
     currentUser=session.user;
-    await loadProfile();
+    // Always switch screen first — never block on profile load
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').style.display='flex';
-    document.getElementById('topbar-date').textContent=new Date().toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    document.getElementById('topbar-date').textContent=
+      new Date().toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    try { await loadProfile(); } catch(e){ console.warn('loadProfile error (non-blocking):', e); }
     nav('dashboard');
   } else {
     document.getElementById('login-screen').style.display='flex';
