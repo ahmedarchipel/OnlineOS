@@ -270,8 +270,25 @@ const SUPABASE_KEY = 'sb_publishable_...';</pre>
 const {createClient} = supabase;
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
   global: { headers: { apikey: SUPABASE_KEY } },
-  auth:   { persistSession: true, autoRefreshToken: true }
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+    lock: async (_name, _timeout, fn) => await fn()
+  }
 });
+
+// ── Data cache (60s TTL per module) ──────────────────────────────────────
+const _CACHE={};
+async function _cached(key, fetcher){
+  const now=Date.now();
+  if(_CACHE[key]&&(now-_CACHE[key].ts)<60000) return _CACHE[key].data;
+  const data=await fetcher();
+  _CACHE[key]={data,ts:now};
+  return data;
+}
+function _invalidate(...keys){ keys.forEach(k=>{ delete _CACHE[k]; }); }
+
 let currentUser=null, currentProfile=null;
 
 function today(){return new Date().toISOString().split('T')[0];}
@@ -578,7 +595,7 @@ async function renderPlanification(){
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
   try {
     const [sR,pR,mR,salR,clR,sgR]=await Promise.all([
-      sb.from('sessions').select('*,professeurs(prenom,nom),matieres(nom,code),salles(nom),niveaux_classes(niveau,classe),sieges(nom)').order('date_session').order('heure_debut'),
+      sb.from('sessions').select('*,professeurs(prenom,nom),matieres(nom,code),salles(nom),niveaux_classes(niveau,classe),sieges(nom)').order('date_session',{ascending:false}).order('heure_debut').limit(500),
       sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
       sb.from('matieres').select('id,nom,code').eq('actif',true),
       sb.from('salles').select('id,nom,siege_id').eq('actif',true),
@@ -820,20 +837,20 @@ async function saveSes(){
     }).select();
   }
   toast(id?'Séance modifiée':'Séance créée','success');
-  closeModal();renderPlanification();
+  _invalidate('planif');closeModal();renderPlanification();
 }
 async function editSes(id){const {data}=await sb.from('sessions').select('*').eq('id',id).single();if(data)openSesModal(data);}
 async function setStatut(id,statut){
   let extra={};
   if(statut==='realisee'){const n=prompt('Nb élèves présents ?','0');if(n===null)return;extra.nb_eleves_presents=parseInt(n)||0;}
   const {error}=await sb.from('sessions').update({statut,...extra}).eq('id',id);
-  if(error)toast(error.message,'error');else{toast('Statut : '+statut,'success');renderPlanification();}
+  if(error)toast(error.message,'error');else{_invalidate('planif');toast('Statut : '+statut,'success');renderPlanification();}
 }
 async function delSes(id){
   if(!confirm('Supprimer cette séance ? (les documents liés seront aussi supprimés)'))return;
   await sb.from('series_documents').delete().eq('session_id',id);
   const {error}=await sb.from('sessions').delete().eq('id',id);
-  if(error)toast(error.message,'error');else{toast('Séance supprimée','success');renderPlanification();}
+  if(error)toast(error.message,'error');else{_invalidate('planif');toast('Séance supprimée','success');renderPlanification();}
 }
 
 </script>
