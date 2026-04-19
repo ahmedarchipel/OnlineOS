@@ -496,14 +496,17 @@ async function renderDashboard(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
   const mois=monthStart();
-  const [sR,iR,mR,saR,abR]=await Promise.all([
-    sb.from('sessions').select('id,statut,date_session,nb_eleves_prevus,nb_eleves_presents').gte('date_session',mois),
-    sb.from('incidents_lives').select('id,resolu').gte('signale_le',mois),
-    sb.from('montages').select('id,statut'),
-    sb.from('saisies').select('id,statut'),
-    sb.from('absences').select('id').gte('created_at',mois)
-  ]);
-  const ses=sR.data||[],inc=iR.data||[],mtg=mR.data||[],sai=saR.data||[],abs=abR.data||[];
+  let ses=[],inc=[],mtg=[],sai=[],abs=[];
+  try {
+    const [sR,iR,mR,saR,abR]=await Promise.all([
+      sb.from('sessions').select('id,statut,date_session,nb_eleves_prevus,nb_eleves_presents').gte('date_session',mois),
+      sb.from('incidents_lives').select('id,resolu').gte('signale_le',mois),
+      sb.from('montages').select('id,statut'),
+      sb.from('saisies').select('id,statut'),
+      sb.from('absences').select('id').gte('created_at',mois)
+    ]);
+    ses=sR.data||[];inc=iR.data||[];mtg=mR.data||[];sai=saR.data||[];abs=abR.data||[];
+  } catch(e){ console.error('Dashboard error:',e); toast('Erreur chargement dashboard','error'); }
   const total=ses.length,real=ses.filter(s=>s.statut==='realisee').length;
   const tr=total?Math.round(real/total*100):0;
   const tp_=ses.reduce((a,s)=>a+(s.nb_eleves_prevus||0),0);
@@ -559,8 +562,10 @@ async function renderPlanification(){
     sb.from('sieges').select('id,nom').eq('actif',true)
   ]);
   PD={sessions:sR.data||[],profs:pR.data||[],matieres:mR.data||[],salles:salR.data||[],classes:clR.data||[],sieges:sgR.data||[]};
-  renderPlanifList('','','','');
+  if(PLANIF_VIEW==='calendar') renderPlanifCalendar('','','','');
+  else renderPlanifList('','','','');
 }
+let PLANIF_VIEW='list'; // 'list' or 'calendar'
 function renderPlanifList(fm,fp,fc,fst){
   const c=document.getElementById('content');
   let ses=PD.sessions;
@@ -574,6 +579,7 @@ function renderPlanifList(fm,fp,fc,fst){
   c.innerHTML=`
   <div class="filter-bar">
     <button class="btn btn-primary" onclick="openSesModal()">+ Nouvelle séance</button>
+    <button class="btn btn-outline" onclick="togglePlanifView()">${PLANIF_VIEW==='list'?'📅 Vue Calendrier':'📋 Vue Liste'}</button>
     <input id="fs" type="text" placeholder="🔍 Rechercher…" oninput="filterP()" style="padding:7px 10px;border:1.5px solid #DDE3EA;border-radius:6px;font-size:13px;min-width:180px"/>
     <select id="fm" onchange="filterP()"><option value="">Tous mois</option>${mOpts}</select>
     <select id="fp" onchange="filterP()" style="min-width:160px"><option value="">Tous profs</option>${pOpts}</select>
@@ -607,6 +613,80 @@ function renderPlanifList(fm,fp,fc,fst){
     </table></div>
   </div>`;
 }
+
+function togglePlanifView(){
+  PLANIF_VIEW=PLANIF_VIEW==='list'?'calendar':'list';
+  renderPlanification();
+}
+
+function renderPlanifCalendar(fm,fp,fc,fst){
+  const c=document.getElementById('content');
+  let ses=PD.sessions;
+  if(fm)ses=ses.filter(s=>s.date_session?.startsWith(fm));
+  if(fp)ses=ses.filter(s=>s.professeur_id===fp);
+  if(fc)ses=ses.filter(s=>s.classe_id===fc);
+  if(fst)ses=ses.filter(s=>s.statut===fst);
+  
+  // Get current month from filter or use current month
+  const curMonth=fm||new Date().toISOString().slice(0,7);
+  const [year,month]=curMonth.split('-').map(Number);
+  const firstDay=new Date(year,month-1,1);
+  const lastDay=new Date(year,month,0);
+  const startDay=firstDay.getDay()||7; // 1=Mon, 7=Sun
+  const daysInMonth=lastDay.getDate();
+  
+  // Build calendar grid
+  const weeks=[];
+  let day=1;
+  let week=[];
+  // Add empty cells for days before first day of month
+  for(let i=1;i<startDay;i++) week.push(null);
+  while(day<=daysInMonth){
+    week.push(day);
+    if(week.length===7){weeks.push(week);week=[];}
+    day++;
+  }
+  if(week.length) weeks.push(week);
+  
+  // Group sessions by date
+  const sesByDate={};
+  ses.forEach(s=>{
+    const d=s.date_session?.slice(8,10);
+    if(d){
+      if(!sesByDate[d]) sesByDate[d]=[];
+      sesByDate[d].push(s);
+    }
+  });
+  
+  const dayNames=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+  const monthNames=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  
+  c.innerHTML=`
+  <div class="filter-bar">
+    <button class="btn btn-primary" onclick="openSesModal()">+ Nouvelle séance</button>
+    <button class="btn btn-outline" onclick="togglePlanifView()">📋 Vue Liste</button>
+    <select id="cal-m" onchange="renderPlanifCalendar(this.value,document.getElementById('fp')?.value,document.getElementById('fc')?.value,document.getElementById('fst')?.value)">
+      ${[...new Set(PD.sessions.map(s=>s.date_session?.slice(0,7)))].sort().reverse().map(m=>`<option value="${m}" ${m===curMonth?'selected':''}>${m}</option>`).join('')}
+    </select>
+  </div>
+  <div class="panel">
+    <div class="panel-header"><span class="panel-title">📅 ${monthNames[month-1]} ${year}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:#DDE3EA;border:2px solid #DDE3EA;border-radius:8px;overflow:hidden">
+      ${dayNames.map(d=>`<div style="background:var(--primary);color:#fff;padding:8px;text-align:center;font-weight:600;font-size:12px">${d}</div>`).join('')}
+      ${weeks.map(week=>week.map(d=>{
+        const dateKey=d?String(d).padStart(2,'0'):null;
+        const daySes=dateKey?sesByDate[dateKey]||[]:[];
+        return `
+        <div style="min-height:80px;background:#fff;padding:4px;display:flex;flex-direction:column;gap:2px;${!d?'opacity:.5':''}">
+          ${d?`<div style="font-weight:600;font-size:12px;color:var(--primary);margin-bottom:2px">${d}</div>
+          ${daySes.map(s=>`<div style="font-size:10px;padding:2px 4px;background:#D6EAF8;border-radius:3px;cursor:pointer" onclick="editSes('${s.id}')" title="${fmtHour(s.heure_debut)}-${fmtHour(s.heure_fin)}">${fmtHour(s.heure_debut)} ${s.matieres?.nom||''}</div>`).join('')}
+          `:''}
+        </div>`;
+      }).join('')).join('')}
+    </div>
+  </div>`;
+}
+
 function filterP(){
   const fs=(document.getElementById('fs')?.value||'').toLowerCase();
   const fm=document.getElementById('fm')?.value||'';
