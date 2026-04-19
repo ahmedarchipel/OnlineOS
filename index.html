@@ -103,6 +103,27 @@ canvas{max-height:200px;}
 .toast-item{background:var(--text);color:#fff;padding:12px 18px;border-radius:8px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.25);animation:slideIn .3s ease;}
 .toast-item.success{background:var(--success);}.toast-item.error{background:var(--danger);}
 @keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+
+/* ── Calendar View ──────────────────────────────────────────── */
+.cal-container{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);}
+.cal-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.cal-week-label{font-weight:700;font-size:15px;flex:1;text-align:center;color:var(--primary);}
+.cal-grid-wrap{overflow-x:auto;min-width:0;}
+.cal-header-row{display:grid;grid-template-columns:52px repeat(7,1fr);border-bottom:2px solid #DDE3EA;}
+.cal-head-cell{padding:7px 3px;text-align:center;font-size:11.5px;font-weight:700;color:#555;text-transform:capitalize;}
+.cal-today-head{background:#EEF4FF;color:var(--primary);border-radius:6px 6px 0 0;}
+.cal-body{display:grid;grid-template-columns:52px 1fr;min-height:660px;}
+.cal-hours-col{position:relative;border-right:1.5px solid #DDE3EA;}
+.cal-hour-label{position:absolute;right:5px;font-size:10px;color:#aaa;transform:translateY(-50%);white-space:nowrap;pointer-events:none;}
+.cal-days-grid{display:grid;grid-template-columns:repeat(7,1fr);position:relative;border-top:1.5px solid #DDE3EA;}
+.cal-day-col{position:relative;border-right:1px solid #EEF2F7;min-height:660px;}
+.cal-today-col{background:#FAFBFF;}
+.cal-hline{position:absolute;left:0;right:0;border-top:1px dashed #EEF2F7;pointer-events:none;}
+.cal-event{position:absolute;left:3px;right:3px;border-radius:5px;padding:3px 6px;font-size:10.5px;cursor:pointer;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.18);z-index:2;transition:opacity .15s,box-shadow .15s;}
+.cal-event:hover{opacity:.85;box-shadow:0 3px 8px rgba(0,0,0,.25);}
+.plan-view-toggle{display:flex;gap:0;border:1.5px solid #DDE3EA;border-radius:7px;overflow:hidden;}
+.plan-view-toggle button{border:0;border-radius:0;padding:6px 14px;font-size:12.5px;cursor:pointer;background:#fff;color:#555;font-weight:600;transition:background .15s,color .15s;}
+.plan-view-toggle button.active{background:var(--primary);color:#fff;}
 </style>
 </head>
 <body>
@@ -506,7 +527,7 @@ async function renderDashboard(){
       sb.from('absences').select('id').gte('created_at',mois)
     ]);
     ses=sR.data||[];inc=iR.data||[];mtg=mR.data||[];sai=saR.data||[];abs=abR.data||[];
-  } catch(e){ console.error('Dashboard error:',e); toast('Erreur chargement dashboard','error'); }
+  } catch(e){ console.warn('Dashboard query error:',e); }
   const total=ses.length,real=ses.filter(s=>s.statut==='realisee').length;
   const tr=total?Math.round(real/total*100):0;
   const tp_=ses.reduce((a,s)=>a+(s.nb_eleves_prevus||0),0);
@@ -550,22 +571,29 @@ async function renderDashboard(){
 <script>
 // ── PLANIFICATION ─────────────────────────────────────────────────────
 let PD={sessions:[],profs:[],matieres:[],salles:[],classes:[],sieges:[]};
+let PLAN_VIEW='list';
+let CAL_WEEK_OFFSET=0;
 async function renderPlanification(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  const [sR,pR,mR,salR,clR,sgR]=await Promise.all([
-    sb.from('sessions').select('*,professeurs(prenom,nom),matieres(nom,code),salles(nom),niveaux_classes(niveau,classe),sieges(nom)').order('date_session').order('heure_debut'),
-    sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
-    sb.from('matieres').select('id,nom,code').eq('actif',true),
-    sb.from('salles').select('id,nom,siege_id').eq('actif',true),
-    sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau'),
-    sb.from('sieges').select('id,nom').eq('actif',true)
-  ]);
-  PD={sessions:sR.data||[],profs:pR.data||[],matieres:mR.data||[],salles:salR.data||[],classes:clR.data||[],sieges:sgR.data||[]};
-  if(PLANIF_VIEW==='calendar') renderPlanifCalendar('','','','');
-  else renderPlanifList('','','','');
+  try {
+    const [sR,pR,mR,salR,clR,sgR]=await Promise.all([
+      sb.from('sessions').select('*,professeurs(prenom,nom),matieres(nom,code),salles(nom),niveaux_classes(niveau,classe),sieges(nom)').order('date_session').order('heure_debut'),
+      sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
+      sb.from('matieres').select('id,nom,code').eq('actif',true),
+      sb.from('salles').select('id,nom,siege_id').eq('actif',true),
+      sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau'),
+      sb.from('sieges').select('id,nom').eq('actif',true)
+    ]);
+    PD={sessions:sR.data||[],profs:pR.data||[],matieres:mR.data||[],salles:salR.data||[],classes:clR.data||[],sieges:sgR.data||[]};
+  } catch(e){
+    console.warn('Planif query error:',e);
+    PD={sessions:[],profs:[],matieres:[],salles:[],classes:[],sieges:[]};
+    document.getElementById('content').innerHTML='<div class="alert alert-danger" style="margin:20px">Erreur chargement : '+e.message+'<br><small>Vérifiez les politiques RLS dans Supabase (fix_rls.sql)</small></div>';
+    return;
+  }
+  renderPlanifList('','','','');
 }
-let PLANIF_VIEW='list'; // 'list' or 'calendar'
 function renderPlanifList(fm,fp,fc,fst){
   const c=document.getElementById('content');
   let ses=PD.sessions;
@@ -576,17 +604,7 @@ function renderPlanifList(fm,fp,fc,fst){
   const mOpts=[...new Set(PD.sessions.map(s=>s.date_session?.slice(0,7)))].sort().reverse().map(m=>`<option value="${m}">${m}</option>`).join('');
   const pOpts=PD.profs.map(p=>`<option value="${p.id}">${p.nom} ${p.prenom}</option>`).join('');
   const clOpts=PD.classes.map(cl=>`<option value="${cl.id}">${cl.niveau} ${cl.classe||''}</option>`).join('');
-  c.innerHTML=`
-  <div class="filter-bar">
-    <button class="btn btn-primary" onclick="openSesModal()">+ Nouvelle séance</button>
-    <button class="btn btn-outline" onclick="togglePlanifView()">${PLANIF_VIEW==='list'?'📅 Vue Calendrier':'📋 Vue Liste'}</button>
-    <input id="fs" type="text" placeholder="🔍 Rechercher…" oninput="filterP()" style="padding:7px 10px;border:1.5px solid #DDE3EA;border-radius:6px;font-size:13px;min-width:180px"/>
-    <select id="fm" onchange="filterP()"><option value="">Tous mois</option>${mOpts}</select>
-    <select id="fp" onchange="filterP()" style="min-width:160px"><option value="">Tous profs</option>${pOpts}</select>
-    <select id="fc" onchange="filterP()" style="min-width:140px"><option value="">Toutes classes</option>${clOpts}</select>
-    <select id="fst" onchange="filterP()"><option value="">Tous statuts</option><option value="planifiee">Planifiée</option><option value="realisee">Réalisée</option><option value="annulee">Annulée</option><option value="reportee">Reportée</option></select>
-    <button class="btn btn-outline btn-sm" onclick="dlCSV()">⬇ CSV</button>
-  </div>
+  const mainContent=PLAN_VIEW==='calendar'?renderCalendarView(ses):`
   <div class="panel">
     <div class="panel-header"><span class="panel-title">📅 Séances (${ses.length})</span></div>
     <div class="tbl-wrap"><table>
@@ -612,119 +630,124 @@ function renderPlanifList(fm,fp,fc,fst){
       </tbody>
     </table></div>
   </div>`;
-}
-
-function togglePlanifView(){
-  PLANIF_VIEW=PLANIF_VIEW==='list'?'calendar':'list';
-  renderPlanification();
-}
-
-function renderPlanifCalendar(fm,fp,fc,fst){
-  const c=document.getElementById('content');
-  let ses=PD.sessions;
-  if(fm)ses=ses.filter(s=>s.date_session?.startsWith(fm));
-  if(fp)ses=ses.filter(s=>s.professeur_id===fp);
-  if(fc)ses=ses.filter(s=>s.classe_id===fc);
-  if(fst)ses=ses.filter(s=>s.statut===fst);
-  
-  // Get current month from filter or use current month
-  const curMonth=fm||new Date().toISOString().slice(0,7);
-  const [year,month]=curMonth.split('-').map(Number);
-  const firstDay=new Date(year,month-1,1);
-  const lastDay=new Date(year,month,0);
-  const startDay=firstDay.getDay()||7; // 1=Mon, 7=Sun
-  const daysInMonth=lastDay.getDate();
-  
-  // Build calendar grid
-  const weeks=[];
-  let day=1;
-  let week=[];
-  // Add empty cells for days before first day of month
-  for(let i=1;i<startDay;i++) week.push(null);
-  while(day<=daysInMonth){
-    week.push(day);
-    if(week.length===7){weeks.push(week);week=[];}
-    day++;
-  }
-  if(week.length) weeks.push(week);
-  
-  // Group sessions by date
-  const sesByDate={};
-  ses.forEach(s=>{
-    const d=s.date_session?.slice(8,10);
-    if(d){
-      if(!sesByDate[d]) sesByDate[d]=[];
-      sesByDate[d].push(s);
-    }
-  });
-  
-  const dayNames=['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
-  const monthNames=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-  
   c.innerHTML=`
   <div class="filter-bar">
     <button class="btn btn-primary" onclick="openSesModal()">+ Nouvelle séance</button>
-    <button class="btn btn-outline" onclick="togglePlanifView()">📋 Vue Liste</button>
-    <select id="cal-m" onchange="renderPlanifCalendar(this.value,document.getElementById('fp')?.value,document.getElementById('fc')?.value,document.getElementById('fst')?.value)">
-      ${[...new Set(PD.sessions.map(s=>s.date_session?.slice(0,7)))].sort().reverse().map(m=>`<option value="${m}" ${m===curMonth?'selected':''}>${m}</option>`).join('')}
-    </select>
+    <div class="plan-view-toggle">
+      <button class="${PLAN_VIEW==='list'?'active':''}" onclick="setPlanView('list')">☰ Liste</button>
+      <button class="${PLAN_VIEW==='calendar'?'active':''}" onclick="setPlanView('calendar')">📅 Calendrier</button>
+    </div>
+    <input id="fs" type="text" placeholder="🔍 Rechercher…" oninput="filterP()" style="padding:7px 10px;border:1.5px solid #DDE3EA;border-radius:6px;font-size:13px;min-width:180px"/>
+    <select id="fm" onchange="filterP()"><option value="">Tous mois</option>${mOpts}</select>
+    <select id="fp" onchange="filterP()" style="min-width:160px"><option value="">Tous profs</option>${pOpts}</select>
+    <select id="fc" onchange="filterP()" style="min-width:140px"><option value="">Toutes classes</option>${clOpts}</select>
+    <select id="fst" onchange="filterP()"><option value="">Tous statuts</option><option value="planifiee">Planifiée</option><option value="realisee">Réalisée</option><option value="annulee">Annulée</option><option value="reportee">Reportée</option></select>
+    <button class="btn btn-outline btn-sm" onclick="dlCSV()">⬇ CSV</button>
   </div>
-  <div class="panel">
-    <div class="panel-header"><span class="panel-title">📅 ${monthNames[month-1]} ${year}</span></div>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;background:#DDE3EA;border:2px solid #DDE3EA;border-radius:8px;overflow:hidden">
-      ${dayNames.map(d=>`<div style="background:var(--primary);color:#fff;padding:8px;text-align:center;font-weight:600;font-size:12px">${d}</div>`).join('')}
-      ${weeks.map(week=>week.map(d=>{
-        const dateKey=d?String(d).padStart(2,'0'):null;
-        const daySes=dateKey?sesByDate[dateKey]||[]:[];
-        return `
-        <div style="min-height:80px;background:#fff;padding:4px;display:flex;flex-direction:column;gap:2px;${!d?'opacity:.5':''}">
-          ${d?`<div style="font-weight:600;font-size:12px;color:var(--primary);margin-bottom:2px">${d}</div>
-          ${daySes.map(s=>`<div style="font-size:10px;padding:2px 4px;background:#D6EAF8;border-radius:3px;cursor:pointer" onclick="editSes('${s.id}')" title="${fmtHour(s.heure_debut)}-${fmtHour(s.heure_fin)}">${fmtHour(s.heure_debut)} ${s.matieres?.nom||''}</div>`).join('')}
-          `:''}
-        </div>`;
-      }).join('')).join('')}
+  ${mainContent}`;
+  if(PLAN_VIEW==='list'){
+    const fmEl=document.getElementById('fm'); if(fmEl) fmEl.value=fm;
+    const fpEl=document.getElementById('fp'); if(fpEl) fpEl.value=fp;
+    const fcEl=document.getElementById('fc'); if(fcEl) fcEl.value=fc;
+    const fstEl=document.getElementById('fst'); if(fstEl) fstEl.value=fst;
+  }
+}
+function setPlanView(v){PLAN_VIEW=v;if(v==='calendar')CAL_WEEK_OFFSET=0;filterP();}
+function calNav(delta){
+  if(delta===0)CAL_WEEK_OFFSET=0;
+  else CAL_WEEK_OFFSET+=delta;
+  filterP();
+}
+function getCalWeekDays(){
+  const today=new Date();
+  const dow=(today.getDay()+6)%7; // Mon=0
+  const mon=new Date(today);
+  mon.setDate(today.getDate()-dow+CAL_WEEK_OFFSET*7);
+  return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});
+}
+function renderCalendarView(sesFull){
+  const days=getCalWeekDays();
+  const dayStrs=days.map(d=>d.toISOString().slice(0,10));
+  const todayStr=new Date().toISOString().slice(0,10);
+  const S_HOUR=7,E_HOUR=22,TOTAL_MINS=(E_HOUR-S_HOUR)*60;
+  const CLR={planifiee:'#3B82F6',realisee:'#22C55E',annulee:'#EF4444',reportee:'#A855F7'};
+  // Filter sessions to this week only (for calendar view)
+  const ses=sesFull.filter(s=>dayStrs.includes(s.date_session));
+  const hourLabels=Array.from({length:E_HOUR-S_HOUR},(_,i)=>{
+    const h=S_HOUR+i;
+    const pct=(i/(E_HOUR-S_HOUR))*100;
+    return `<div class="cal-hour-label" style="top:${pct}%">${String(h).padStart(2,'0')}:00</div>`;
+  }).join('');
+  const hLines=Array.from({length:E_HOUR-S_HOUR},(_,i)=>{
+    const pct=(i/(E_HOUR-S_HOUR))*100;
+    return `<div class="cal-hline" style="top:${pct}%"></div>`;
+  }).join('');
+  const dayCols=days.map((d,di)=>{
+    const dayStr=dayStrs[di];
+    const isToday=dayStr===todayStr;
+    const daySes=ses.filter(s=>s.date_session===dayStr).sort((a,b)=>(a.heure_debut||'').localeCompare(b.heure_debut||''));
+    const blocks=daySes.map(s=>{
+      const [sh=8,sm=0]=(s.heure_debut||'08:00').split(':').map(Number);
+      const [eh=9,em=0]=(s.heure_fin||'09:00').split(':').map(Number);
+      const startMin=Math.max(0,(sh-S_HOUR)*60+sm);
+      const endMin=Math.min(TOTAL_MINS,(eh-S_HOUR)*60+em);
+      const topPct=(startMin/TOTAL_MINS)*100;
+      const hPct=Math.max(((endMin-startMin)/TOTAL_MINS)*100,2.5);
+      const bg=CLR[s.statut]||'#3B82F6';
+      const prof=s.professeurs?(s.professeurs.nom+' '+s.professeurs.prenom):'';
+      const mat=s.matieres?.code||'';
+      const cls=s.niveaux_classes?(s.niveaux_classes.niveau+' '+(s.niveaux_classes.classe||'')):'';
+      const title=`${mat} — ${cls}\n${prof}\n${fmtHour(s.heure_debut)}–${fmtHour(s.heure_fin)}`;
+      return `<div class="cal-event" style="top:${topPct}%;height:${hPct}%;background:${bg}" title="${title.replace(/"/g,'&quot;')}" onclick="editSes('${s.id}')"><strong style="font-size:10px">${fmtHour(s.heure_debut)}</strong> <span>${mat}</span><br><span style="opacity:.85">${prof}</span></div>`;
+    }).join('');
+    return `<div class="cal-day-col${isToday?' cal-today-col':''}">${blocks||''}</div>`;
+  }).join('');
+  const headCells=days.map((d,i)=>{
+    const isToday=dayStrs[i]===todayStr;
+    const lbl=d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+    return `<div class="cal-head-cell${isToday?' cal-today-head':''}">${lbl}</div>`;
+  }).join('');
+  const weekLbl=`${days[0].toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} – ${days[6].toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}`;
+  return `<div class="cal-container">
+    <div class="cal-nav">
+      <button class="btn btn-outline btn-sm" onclick="calNav(-1)">◀ Préc.</button>
+      <span class="cal-week-label">${weekLbl} <small style="font-weight:400;color:#888">(${ses.length} séance${ses.length!==1?'s':''})</small></span>
+      <button class="btn btn-outline btn-sm" onclick="calNav(0)">Aujourd'hui</button>
+      <button class="btn btn-outline btn-sm" onclick="calNav(1)">Suiv. ▶</button>
+    </div>
+    <div class="cal-grid-wrap">
+      <div class="cal-header-row">
+        <div style="width:52px"></div>${headCells}
+      </div>
+      <div class="cal-body">
+        <div class="cal-hours-col">${hourLabels}</div>
+        <div class="cal-days-grid">${dayCols}${hLines}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;padding:10px 0 2px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:#888">Légende :</span>
+      <span class="badge" style="background:#3B82F6;color:#fff;padding:3px 8px">Planifiée</span>
+      <span class="badge" style="background:#22C55E;color:#fff;padding:3px 8px">Réalisée</span>
+      <span class="badge" style="background:#EF4444;color:#fff;padding:3px 8px">Annulée</span>
+      <span class="badge" style="background:#A855F7;color:#fff;padding:3px 8px">Reportée</span>
+      <span style="font-size:11px;color:#aaa;margin-left:8px">Cliquez sur un bloc pour modifier la séance</span>
     </div>
   </div>`;
 }
-
 function filterP(){
   const fs=(document.getElementById('fs')?.value||'').toLowerCase();
   const fm=document.getElementById('fm')?.value||'';
   const fp=document.getElementById('fp')?.value||'';
   const fc=document.getElementById('fc')?.value||'';
   const fst=document.getElementById('fst')?.value||'';
-  let ses=PD.sessions;
-  if(fm)ses=ses.filter(s=>s.date_session?.startsWith(fm));
-  if(fp)ses=ses.filter(s=>s.professeur_id===fp);
-  if(fc)ses=ses.filter(s=>s.classe_id===fc);
-  if(fst)ses=ses.filter(s=>s.statut===fst);
-  if(fs)ses=ses.filter(s=>(s.professeurs?.nom+' '+s.professeurs?.prenom+' '+s.matieres?.nom+' '+s.date_session).toLowerCase().includes(fs));
-  const mOpts=[...new Set(PD.sessions.map(s=>s.date_session?.slice(0,7)))].sort().reverse().map(m=>`<option value="${m}">${m}</option>`).join('');
-  const pOpts=PD.profs.map(p=>`<option value="${p.id}">${p.nom} ${p.prenom}</option>`).join('');
-  const clOpts=PD.classes.map(cl=>`<option value="${cl.id}">${cl.niveau} ${cl.classe||''}</option>`).join('');
-  const c=document.getElementById('content');
-  if(!c)return;
-  // Re-render just the table inside existing panel
-  const tbody=c.querySelector('tbody');
-  if(!tbody)return renderPlanifList(fm,fp,fc,fst);
-  tbody.innerHTML=ses.length?ses.map(s=>`
-    <tr>
-      <td><strong>${fmtDate(s.date_session)}</strong></td>
-      <td>${fmtHour(s.heure_debut)}–${fmtHour(s.heure_fin)}</td>
-      <td>${s.professeurs?s.professeurs.nom+' '+s.professeurs.prenom:'—'}</td>
-      <td>${s.matieres?`<span class="badge badge-blue">${s.matieres.code}</span> ${s.matieres.nom}`:'—'}</td>
-      <td>${s.niveaux_classes?s.niveaux_classes.niveau+' '+(s.niveaux_classes.classe||''):'—'}</td>
-      <td>${s.salles?.nom||'—'}</td>
-      <td>${s.nb_eleves_prevus||'—'}</td>
-      <td>${badge(s.statut)}</td>
-      <td style="white-space:nowrap">
-        <button class="btn btn-outline btn-sm" onclick="editSes('${s.id}')">✏️</button>
-        <button class="btn btn-sm" style="background:var(--success);color:#fff" onclick="setStatut('${s.id}','realisee')">✔</button>
-        <button class="btn btn-danger btn-sm" onclick="setStatut('${s.id}','annulee')">✕</button>
-        <button class="btn btn-sm" style="background:#8e44ad;color:#fff" onclick="setStatut('${s.id}','reportee')">⏩</button>
-        <button class="btn btn-sm" style="background:#636e72;color:#fff" onclick="delSes('${s.id}')">🗑</button>
-      </td>
-    </tr>`).join(''):`<tr><td colspan="9"><div class="empty"><div class="icon">📅</div>Aucune séance</div></td></tr>`;
+  if(fs){
+    const saved=PD.sessions;
+    PD.sessions=saved.filter(s=>(s.professeurs?.nom+' '+s.professeurs?.prenom+' '+s.matieres?.nom+' '+s.date_session).toLowerCase().includes(fs));
+    renderPlanifList(fm,fp,fc,fst);
+    PD.sessions=saved;
+  } else {
+    renderPlanifList(fm,fp,fc,fst);
+  }
 }
 function dlCSV(){
   const rows=[['Date','HeureDeb','HeureFin','Professeur','Matière','Classe','Salle','NbPrévus','Statut']];
@@ -818,12 +841,17 @@ async function delSes(id){
 async function renderSaisie(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  const [dR,pR,clR]=await Promise.all([
-    sb.from('series_documents').select('*,sessions(id,date_session,heure_debut,heure_fin,matieres(nom,code),niveaux_classes(niveau,classe),statut),professeurs(prenom,nom)').order('created_at',{ascending:false}),
-    sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
-    sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau')
-  ]);
-  window._SD={docs:dR.data||[],profs:pR.data||[],classes:clR.data||[]};
+  try {
+    const [dR,pR,clR]=await Promise.all([
+      sb.from('series_documents').select('*,sessions(id,date_session,heure_debut,heure_fin,matieres(nom,code),niveaux_classes(niveau,classe),statut),professeurs(prenom,nom)').order('created_at',{ascending:false}),
+      sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
+      sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau')
+    ]);
+    window._SD={docs:dR.data||[],profs:pR.data||[],classes:clR.data||[]};
+  } catch(e){
+    console.warn('Saisie query error:',e);
+    window._SD={docs:[],profs:[],classes:[]};
+  }
   renderSaisieList('','','');
 }
 function renderSaisieList(fm,fp,fst){
@@ -1275,12 +1303,17 @@ async function saveCf(preE,preA){
 async function renderProfesseurs(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  const [pR,sR,mR]=await Promise.all([
-    sb.from('professeurs').select('*,sieges(nom)').order('nom'),
-    sb.from('sieges').select('id,nom').eq('actif',true),
-    sb.from('matieres').select('id,nom,code').eq('actif',true)
-  ]);
-  window._PD={profs:pR.data||[],sigs:sR.data||[],matieres:mR.data||[]};
+  try {
+    const [pR,sR,mR]=await Promise.all([
+      sb.from('professeurs').select('*,sieges(nom)').order('nom'),
+      sb.from('sieges').select('id,nom').eq('actif',true),
+      sb.from('matieres').select('id,nom,code').eq('actif',true)
+    ]);
+    window._PD={profs:pR.data||[],sigs:sR.data||[],matieres:mR.data||[]};
+  } catch(e){
+    console.warn('Profs query error:',e);
+    window._PD={profs:[],sigs:[],matieres:[]};
+  }
   renderProfList('','');
 }
 function renderProfList(fs,fsig){
@@ -1300,7 +1333,7 @@ function renderProfList(fs,fsig){
     <thead><tr><th>Nom</th><th>Email</th><th>Téléphone</th><th>Siège</th><th>Taux horaire</th><th>Recrutement</th><th>Statut</th><th>Actions</th></tr></thead>
     <tbody>${list.length?list.map(p=>`<tr>
       <td><strong>${p.nom} ${p.prenom}</strong></td><td>${p.email||'—'}</td><td>${p.telephone||'—'}</td>
-      <td>${p.sieges?.nom||'—'}</td><td>${p.taux_horaire?p.taux_horaire+' DA/h':'—'}</td>
+      <td>${p.sieges?.nom||'—'}</td><td>${p.taux_horaire?p.taux_horaire+' TND/h':'—'}</td>
       <td>${fmtDate(p.date_recrutement)}</td>
       <td>${p.actif?badge('actif'):badge('inactif')}</td>
       <td style="white-space:nowrap">
@@ -1318,7 +1351,7 @@ function openPrM(p){
   <input type="hidden" id="pr-id" value="${p?.id||''}"/>
   <div class="form-row"><div class="form-group"><label>Prénom</label><input id="pr-pn" value="${p?.prenom||''}"/></div><div class="form-group"><label>Nom</label><input id="pr-nm" value="${p?.nom||''}"/></div></div>
   <div class="form-row"><div class="form-group"><label>Email</label><input id="pr-em" type="email" value="${p?.email||''}"/></div><div class="form-group"><label>Téléphone</label><input id="pr-tel" value="${p?.telephone||''}"/></div></div>
-  <div class="form-row"><div class="form-group"><label>Siège</label><select id="pr-sg"><option value="">—</option>${sO}</select></div><div class="form-group"><label>Taux horaire DA/h</label><input id="pr-tx" type="number" value="${p?.taux_horaire||0}"/></div></div>
+  <div class="form-row"><div class="form-group"><label>Siège</label><select id="pr-sg"><option value="">—</option>${sO}</select></div><div class="form-group"><label>Taux horaire TND/h</label><input id="pr-tx" type="number" value="${p?.taux_horaire||0}"/></div></div>
   <div class="form-row"><div class="form-group"><label>Date recrutement</label><input id="pr-dr" type="date" value="${p?.date_recrutement||''}"/></div><div class="form-group"><label>Statut</label><select id="pr-ac"><option value="true" ${p?.actif!==false?'selected':''}>Actif</option><option value="false" ${p?.actif===false?'selected':''}>Inactif</option></select></div></div>
   <div class="form-group"><label>Spécialité / Notes</label><textarea id="pr-no" rows="2">${p?.notes||''}</textarea></div>
   <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal()">Annuler</button><button class="btn btn-primary" onclick="savePr()">💾 Enregistrer</button></div>`);
@@ -1345,8 +1378,16 @@ async function delProf(id,nom){
 async function renderEleves(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  const [eR,clR]=await Promise.all([sb.from('eleves').select('*,niveaux_classes(niveau,classe)').order('nom'),sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau')]);
-  window._ED={elvs:eR.data||[],cls:clR.data||[]};
+  try {
+    const [eR,clR]=await Promise.all([
+      sb.from('eleves').select('*,niveaux_classes(niveau,classe)').order('nom'),
+      sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau')
+    ]);
+    window._ED={elvs:eR.data||[],cls:clR.data||[]};
+  } catch(e){
+    console.warn('Eleves query error:',e);
+    window._ED={elvs:[],cls:[]};
+  }
   renderElvList('','','');
 }
 function renderElvList(fs,fcl,fst){
@@ -1456,7 +1497,7 @@ async function renderSalaires(){
   <div class="panel">
     <div class="panel-header"><span class="panel-title">💰 Salaires — ${mois}</span></div>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Professeur</th><th>Séances</th><th>Heures</th><th>Taux DA/h</th><th>Montant total</th><th>Statut</th><th>Payé le</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Professeur</th><th>Séances</th><th>Heures</th><th>Taux TND/h</th><th>Montant total</th><th>Statut</th><th>Payé le</th><th>Actions</th></tr></thead>
       <tbody>${profs.map(p=>{
         const pm=profMap[p.id]||{sessions:[],heures:0};
         const sal=salByProf[p.id];
@@ -1466,7 +1507,7 @@ async function renderSalaires(){
           <td>${pm.sessions.length}</td>
           <td>${pm.heures.toFixed(2)}h</td>
           <td>${p.taux_horaire||0} DA</td>
-          <td><strong>${sal?sal.montant_total.toLocaleString('fr-DZ'):montant.toLocaleString('fr-DZ')} DA</strong></td>
+          <td><strong>${sal?sal.montant_total.toLocaleString('fr-TN'):montant.toLocaleString('fr-TN')} TND</strong></td>
           <td>${sal?badge(sal.statut):pm.sessions.length>0?'<span class="badge badge-orange">non calculé</span>':'<span class="badge badge-grey">aucune séance</span>'}</td>
           <td>${sal?.date_paiement?fmtDate(sal.date_paiement):'—'}</td>
           <td style="white-space:nowrap">
@@ -1518,7 +1559,7 @@ async function voirDetailSal(profId,mois){
   const rows=pm.sessions.map(s=>`<tr><td>${fmtDate(s.date_session)}</td><td>${fmtHour(s.heure_debut)}–${fmtHour(s.heure_fin)}</td><td>${s.heure_debut&&s.heure_fin?((parseInt(s.heure_fin)-parseInt(s.heure_debut))||'?')+' h':'—'}</td></tr>`).join('');
   openModal(`<div class="modal-title">📋 Détail — ${p?.nom} ${p?.prenom} — ${mois}</div>
   <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Horaire</th><th>Durée</th></tr></thead><tbody>${rows||'<tr><td colspan="3">Aucune séance</td></tr>'}</tbody></table></div>
-  <div style="margin-top:16px;font-weight:600">Total : ${pm.heures.toFixed(2)}h × ${p?.taux_horaire||0} DA = <strong>${(pm.heures*(p?.taux_horaire||0)).toLocaleString('fr-DZ')} DA</strong></div>
+  <div style="margin-top:16px;font-weight:600">Total : ${pm.heures.toFixed(2)}h × ${p?.taux_horaire||0} DA = <strong>${(pm.heures*(p?.taux_horaire||0)).toLocaleString('fr-TN')} TND</strong></div>
   <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal()">Fermer</button></div>`);
 }
 function dlSalCSV(mois){
@@ -1686,15 +1727,4 @@ async function saveSg(){
   const id=document.getElementById('sg-id').value;
   const payload={nom:document.getElementById('sg-nm').value,telephone:document.getElementById('sg-tel').value||null,adresse:document.getElementById('sg-adr').value||null,responsable:document.getElementById('sg-res').value||null,actif:document.getElementById('sg-ac').value==='true'};
   const {error}=id?await sb.from('sieges').update(payload).eq('id',id):await sb.from('sieges').insert(payload);
-  if(error)toast(error.message,'error');else{toast('Siège enregistré','success');closeModal();renderReferentiels();}
-}
-// ── Generic delete ──
-async function delRef(table,id,reloadFn){
-  if(!confirm('Supprimer cet élément ? Cette action est irréversible.'))return;
-  const {error}=await sb.from(table).delete().eq('id',id);
-  if(error)toast(error.message,'error');else{toast('Supprimé','success');if(window[reloadFn])window[reloadFn]();}
-}
-
-</script>
-</body>
-</html>
+  if(error)toast(error.message,'erro
