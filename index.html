@@ -278,6 +278,26 @@ const sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
   }
 });
 
+
+// ── Reference data cache (loaded once per session) ───────────────────────
+let REFS={profs:[],matieres:[],salles:[],classes:[],sieges:[],loaded:false,loading:false};
+async function loadRefs(){
+  if(REFS.loaded)return;
+  if(REFS.loading){while(REFS.loading)await new Promise(r=>setTimeout(r,40));return;}
+  REFS.loading=true;
+  try{
+    const [pR,mR,salR,clR,sgR]=await Promise.all([
+      sb.from('professeurs').select('id,prenom,nom,taux_horaire,siege_id').eq('actif',true).order('nom'),
+      sb.from('matieres').select('id,nom,code,couleur').eq('actif',true).order('nom'),
+      sb.from('salles').select('id,nom,siege_id,type_salle,capacite').eq('actif',true).order('nom'),
+      sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau'),
+      sb.from('sieges').select('id,nom,adresse,telephone,responsable,actif').order('nom')
+    ]);
+    REFS={profs:pR.data||[],matieres:mR.data||[],salles:salR.data||[],classes:clR.data||[],sieges:sgR.data||[],loaded:true,loading:false};
+  }catch(e){REFS.loading=false;console.warn('loadRefs error:',e);}
+}
+function invalidateRefs(){REFS.loaded=false;REFS.loading=false;}
+
 // ── Data cache (60s TTL per module) ──────────────────────────────────────
 const _CACHE={};
 async function _cached(key, fetcher){
@@ -485,6 +505,7 @@ sb.auth.onAuthStateChange(async(_,session)=>{
     document.getElementById('topbar-date').textContent=
       new Date().toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
     try { await loadProfile(); } catch(e){ console.warn('loadProfile error (non-blocking):', e); }
+    loadRefs().catch(e=>console.warn('loadRefs preload:',e));
     nav('dashboard');
   } else {
     document.getElementById('login-screen').style.display='flex';
@@ -594,15 +615,10 @@ async function renderPlanification(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
   try {
-    const [sR,pR,mR,salR,clR,sgR]=await Promise.all([
-      sb.from('sessions').select('*,professeurs(prenom,nom),matieres(nom,code),salles(nom),niveaux_classes(niveau,classe),sieges(nom)').order('date_session',{ascending:false}).order('heure_debut').limit(500),
-      sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
-      sb.from('matieres').select('id,nom,code').eq('actif',true),
-      sb.from('salles').select('id,nom,siege_id').eq('actif',true),
-      sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau'),
-      sb.from('sieges').select('id,nom').eq('actif',true)
-    ]);
-    PD={sessions:sR.data||[],profs:pR.data||[],matieres:mR.data||[],salles:salR.data||[],classes:clR.data||[],sieges:sgR.data||[]};
+    await loadRefs();
+    const {data:_ses,error:_eP}=await sb.from('sessions').select('*,professeurs(prenom,nom),matieres(nom,code),salles(nom),niveaux_classes(niveau,classe),sieges(nom)').order('date_session',{ascending:false}).order('heure_debut').limit(500);
+    if(_eP) throw _eP;
+    PD={sessions:_ses||[],profs:REFS.profs,matieres:REFS.matieres,salles:REFS.salles,classes:REFS.classes,sieges:REFS.sieges};
   } catch(e){
     console.warn('Planif query error:',e);
     PD={sessions:[],profs:[],matieres:[],salles:[],classes:[],sieges:[]};
@@ -859,12 +875,10 @@ async function renderSaisie(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
   try {
-    const [dR,pR,clR]=await Promise.all([
-      sb.from('series_documents').select('*,sessions(id,date_session,heure_debut,heure_fin,matieres(nom,code),niveaux_classes(niveau,classe),statut),professeurs(prenom,nom)').order('created_at',{ascending:false}),
-      sb.from('professeurs').select('id,prenom,nom').eq('actif',true).order('nom'),
-      sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau')
-    ]);
-    window._SD={docs:dR.data||[],profs:pR.data||[],classes:clR.data||[]};
+    await loadRefs();
+    const {data:_docs,error:_eS}=await sb.from('series_documents').select('*,sessions(id,date_session,heure_debut,heure_fin,matieres(nom,code),niveaux_classes(niveau,classe),statut),professeurs(prenom,nom)').order('created_at',{ascending:false}).limit(300);
+    if(_eS) throw _eS;
+    window._SD={docs:_docs||[],profs:REFS.profs,classes:REFS.classes};
   } catch(e){
     console.warn('Saisie query error:',e);
     window._SD={docs:[],profs:[],classes:[]};
@@ -1321,12 +1335,10 @@ async function renderProfesseurs(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
   try {
-    const [pR,sR,mR]=await Promise.all([
-      sb.from('professeurs').select('*,sieges(nom)').order('nom'),
-      sb.from('sieges').select('id,nom').eq('actif',true),
-      sb.from('matieres').select('id,nom,code').eq('actif',true)
-    ]);
-    window._PD={profs:pR.data||[],sigs:sR.data||[],matieres:mR.data||[]};
+    await loadRefs();
+    const {data:_profs,error:_ePR}=await sb.from('professeurs').select('*,sieges(nom)').order('nom');
+    if(_ePR) throw _ePR;
+    window._PD={profs:_profs||[],sigs:REFS.sieges,matieres:REFS.matieres};
   } catch(e){
     console.warn('Profs query error:',e);
     window._PD={profs:[],sigs:[],matieres:[]};
@@ -1377,16 +1389,16 @@ async function savePr(){
   const id=document.getElementById('pr-id').value;
   const payload={prenom:document.getElementById('pr-pn').value,nom:document.getElementById('pr-nm').value,email:document.getElementById('pr-em').value||null,telephone:document.getElementById('pr-tel').value||null,siege_id:document.getElementById('pr-sg').value||null,taux_horaire:parseFloat(document.getElementById('pr-tx').value)||0,date_recrutement:document.getElementById('pr-dr').value||null,actif:document.getElementById('pr-ac').value==='true',notes:document.getElementById('pr-no').value||null};
   const {error}=id?await sb.from('professeurs').update(payload).eq('id',id):await sb.from('professeurs').insert(payload);
-  if(error)toast(error.message,'error');else{toast('Professeur enregistré','success');closeModal();renderProfesseurs();}
+  if(error)toast(error.message,'error');else{toast('Professeur enregistré','success');invalidateRefs();closeModal();renderProfesseurs();}
 }
 async function toggleProfActif(id,cur){
   const {error}=await sb.from('professeurs').update({actif:!cur}).eq('id',id);
-  if(error)toast(error.message,'error');else{toast(cur?'Professeur désactivé':'Professeur activé','success');renderProfesseurs();}
+  if(error)toast(error.message,'error');else{toast(cur?'Professeur désactivé':'Professeur activé','success');invalidateRefs();renderProfesseurs();}
 }
 async function delProf(id,nom){
   if(!confirm(`Supprimer le professeur "${nom}" ? Cette action est irréversible.`))return;
   const {error}=await sb.from('professeurs').delete().eq('id',id);
-  if(error)toast(error.message,'error');else{toast('Professeur supprimé','success');renderProfesseurs();}
+  if(error)toast(error.message,'error');else{toast('Professeur supprimé','success');invalidateRefs();renderProfesseurs();}
 }
 
 </script>
@@ -1396,11 +1408,10 @@ async function renderEleves(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
   try {
-    const [eR,clR]=await Promise.all([
-      sb.from('eleves').select('*,niveaux_classes(niveau,classe)').order('nom'),
-      sb.from('niveaux_classes').select('id,niveau,classe').eq('actif',true).order('niveau')
-    ]);
-    window._ED={elvs:eR.data||[],cls:clR.data||[]};
+    await loadRefs();
+    const {data:_elvs,error:_eE}=await sb.from('eleves').select('*,niveaux_classes(niveau,classe)').order('nom').limit(500);
+    if(_eE) throw _eE;
+    window._ED={elvs:_elvs||[],cls:REFS.classes};
   } catch(e){
     console.warn('Eleves query error:',e);
     window._ED={elvs:[],cls:[]};
@@ -1471,12 +1482,12 @@ async function renderSalaires(){
   const c=document.getElementById('content');
   c.innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
   const mois=document.getElementById('sal-mois')?.value||new Date().toISOString().slice(0,7);
-  const [sR,pR,sesR]=await Promise.all([
+  await loadRefs();
+  const [{data:_sal,error:_e1},{data:_sesS,error:_e2}]=await Promise.all([
     sb.from('salaires').select('*,professeurs(prenom,nom,taux_horaire)').order('mois',{ascending:false}),
-    sb.from('professeurs').select('id,prenom,nom,taux_horaire').eq('actif',true).order('nom'),
     sb.from('sessions').select('professeur_id,heure_debut,heure_fin,statut,date_session').eq('statut','realisee')
   ]);
-  const salaires=sR.data||[],profs=pR.data||[],sessions=sesR.data||[];
+  const salaires=_sal||[],profs=REFS.profs,sessions=_sesS||[];
   // Build months list
   const moisList=[...new Set([...salaires.map(s=>s.mois),new Date().toISOString().slice(0,7),...Array.from({length:5},(_,i)=>{const d=new Date();d.setMonth(d.getMonth()-i-1);return d.toISOString().slice(0,7);})].filter(Boolean))].sort().reverse();
   const mOpts=moisList.map(m=>`<option value="${m}" ${m===mois?'selected':''}>${m}</option>`).join('');
@@ -1648,7 +1659,7 @@ async function saveCl(){
   const id=document.getElementById('cl-id').value;
   const payload={niveau:document.getElementById('cl-nv').value,classe:document.getElementById('cl-cl').value||null,capacite_max:parseInt(document.getElementById('cl-cap').value)||null,actif:document.getElementById('cl-ac').value==='true'};
   const {error}=id?await sb.from('niveaux_classes').update(payload).eq('id',id):await sb.from('niveaux_classes').insert(payload);
-  if(error)toast(error.message,'error');else{toast('Classe enregistrée','success');closeModal();renderReferentiels();}
+  if(error)toast(error.message,'error');else{toast('Classe enregistrée','success');invalidateRefs();closeModal();renderReferentiels();}
 }
 // ── MATIÈRES ──
 function buildMatiTab(){
@@ -1680,7 +1691,7 @@ async function saveMa(){
   const id=document.getElementById('ma-id').value;
   const payload={nom:document.getElementById('ma-nm').value,code:document.getElementById('ma-cd').value||null,couleur:document.getElementById('ma-col').value||null,actif:document.getElementById('ma-ac').value==='true',description:document.getElementById('ma-desc').value||null};
   const {error}=id?await sb.from('matieres').update(payload).eq('id',id):await sb.from('matieres').insert(payload);
-  if(error)toast(error.message,'error');else{toast('Matière enregistrée','success');closeModal();renderReferentiels();}
+  if(error)toast(error.message,'error');else{toast('Matière enregistrée','success');invalidateRefs();closeModal();renderReferentiels();}
 }
 // ── SALLES ──
 function buildSallesTab(){
@@ -1713,7 +1724,7 @@ async function saveSa(){
   const id=document.getElementById('sa-id').value;
   const payload={nom:document.getElementById('sa-nm').value,siege_id:document.getElementById('sa-sg').value||null,type_salle:document.getElementById('sa-ty').value,capacite:parseInt(document.getElementById('sa-cap').value)||null,actif:document.getElementById('sa-ac').value==='true'};
   const {error}=id?await sb.from('salles').update(payload).eq('id',id):await sb.from('salles').insert(payload);
-  if(error)toast(error.message,'error');else{toast('Salle enregistrée','success');closeModal();renderReferentiels();}
+  if(error)toast(error.message,'error');else{toast('Salle enregistrée','success');invalidateRefs();closeModal();renderReferentiels();}
 }
 // ── SIÈGES ──
 function buildSiegesTab(){
@@ -1744,13 +1755,13 @@ async function saveSg(){
   const id=document.getElementById('sg-id').value;
   const payload={nom:document.getElementById('sg-nm').value,telephone:document.getElementById('sg-tel').value||null,adresse:document.getElementById('sg-adr').value||null,responsable:document.getElementById('sg-res').value||null,actif:document.getElementById('sg-ac').value==='true'};
   const {error}=id?await sb.from('sieges').update(payload).eq('id',id):await sb.from('sieges').insert(payload);
-  if(error)toast(error.message,'error');else{toast('Siège enregistré','success');closeModal();renderReferentiels();}
+  if(error)toast(error.message,'error');else{toast('Siège enregistré','success');invalidateRefs();closeModal();renderReferentiels();}
 }
 async function delRef(table,id,reloadFn){
   if(!confirm('Supprimer cet élément ?'))return;
   const {error}=await sb.from(table).delete().eq('id',id);
   if(error)toast(error.message,'error');
-  else{toast('Supprimé','success');if(reloadFn&&window[reloadFn])window[reloadFn]();}
+  else{toast('Supprimé','success');invalidateRefs();if(reloadFn&&window[reloadFn])window[reloadFn]();}
 }
 </script>
 </body>
