@@ -1727,4 +1727,14 @@ async function saveSg(){
   const id=document.getElementById('sg-id').value;
   const payload={nom:document.getElementById('sg-nm').value,telephone:document.getElementById('sg-tel').value||null,adresse:document.getElementById('sg-adr').value||null,responsable:document.getElementById('sg-res').value||null,actif:document.getElementById('sg-ac').value==='true'};
   const {error}=id?await sb.from('sieges').update(payload).eq('id',id):await sb.from('sieges').insert(payload);
-  if(error)toast(error.message,'erro
+  if(error)toast(error.message,'error');else{toast('Siège enregistré','success');closeModal();renderReferentiels();}
+}
+async function delRef(table,id,reloadFn){
+  if(!confirm('Supprimer cet élément ?'))return;
+  const {error}=await sb.from(table).delete().eq('id',id);
+  if(error)toast(error.message,'error');
+  else{toast('Supprimé','success');if(reloadFn&&window[reloadFn])window[reloadFn]();}
+}
+</script>
+</body>
+</html>
